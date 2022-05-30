@@ -81,10 +81,10 @@ def create_yolov4_dataset(dataset, train_test_split = 0.8, output_folder='./'):
 def create_yolov5_dataset(dataset, train_test_split = 0.8, output_folder='./'):
     anno = [0, 0, 0, 0, 0]
     train_files = []
-    test_files = []
-       
+    test_files = []   
     np.random.seed(42)
-    
+    leopard_dict = {}
+    class_count = 0
     train_image_path =  output_folder+'/train'                   
     isExist = os.path.exists(train_image_path)                  
                     
@@ -102,10 +102,17 @@ def create_yolov5_dataset(dataset, train_test_split = 0.8, output_folder='./'):
 
     for sample in dataset:  
         anno[1:] = sample['ground_truth']['detections'][0]['bounding_box']
+        name = sample['ground_truth']['detections'][0]['name']
+        
+        if name not in leopard_dict.keys():
+            leopard_dict[name] = 'leop_'+str(class_count)+'_'
+            class_count = class_count + 1
+            
+        file_suffix = leopard_dict[name]
         height = sample['metadata']['height']
         width = sample['metadata']['width']
         
-        
+       
         if anno[3] >=1.0:
             anno[3] = 1-1.0/width
             
@@ -116,14 +123,16 @@ def create_yolov5_dataset(dataset, train_test_split = 0.8, output_folder='./'):
         anno[2] = anno[2]+0.5*anno[4]       
      
         old_image_file = sample['filepath']
-       
-        if(np.random.random_sample() > train_test_split):        
-            new_image_file = train_image_path + '/images/'+ old_image_file.split("/")[-1]
-            new_anno_file = train_image_path + '/labels/'+ old_image_file.split("/")[-1]
+        new_file_name =  old_image_file.split("/")[-1][-10:]
+        new_file_name = file_suffix + new_file_name
+        if(np.random.random_sample() < train_test_split):    
+            
+            new_image_file = train_image_path + '/images/'+ new_file_name
+            new_anno_file = train_image_path + '/labels/'+ new_file_name
                 
         else:
-            new_image_file =  test_image_path + '/images/'+ old_image_file.split("/")[-1]     
-            new_anno_file = test_image_path + '/labels/'+ old_image_file.split("/")[-1]
+            new_image_file =  test_image_path + '/images/'+ new_file_name     
+            new_anno_file = test_image_path + '/labels/'+ new_file_name
                         
         new_anno_file = new_anno_file.replace("jpg", "txt")              
            
