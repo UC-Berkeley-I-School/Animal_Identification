@@ -167,6 +167,31 @@ def run(
                         c = int(cls)  # integer class
                         label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
                         annotator.box_label(xyxy, label, color=colors(c, True))
+
+                        ####################################>>>>>>>>>> START of modified code <<<<<<<<<<<########################## 
+                        #############>> commented this line to not to print bounding box on image
+                        # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
+
+                        x1 = int(xyxy[0].item())
+                        y1 = int(xyxy[1].item())
+                        x2 = int(xyxy[2].item())
+                        y2 = int(xyxy[3].item())
+
+                        confidence_score = conf
+                        class_index = cls
+                        object_name = names[int(cls)]
+                        print(save_path)
+                        print('bounding box is ', x1, y1, x2, y2)
+                        print('class index is ', class_index)
+                        print('detected object name is ', object_name)
+                        original_img = im0
+                        cropped_img = im0[y1:y2, x1:x2]
+                        cropped_path = '/content/Animal_Identification/train/cropped_images/' + save_path.split("/")[-1]
+                        print(cropped_path)
+                        cv2.imwrite(cropped_path,cropped_img) 
+                        ### >>>>>> to retain all cropped picture give different name for each pictures, else it will overwrite and only last image will be saved.
+                        
+####################################>>>>>>>>>> END of modified code <<<<<<<<<<<##########################       
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
 
