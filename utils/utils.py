@@ -1,6 +1,7 @@
 import fiftyone as fo
 import numpy as np
 import os
+import shutil, sys
 
 
 # Creates YOLOV4 dataset
@@ -144,6 +145,50 @@ def create_yolov5_dataset(dataset, train_test_split = 0.8, output_folder='./'):
             # write each item on a new line
                 fp.write("%s " % item)
             fp.write("\n")  
+
+def split_dev_test(dataPath, dev_test_split=0.5):
+    '''
+    Split test into dev and test with 0.5 split
+    Input: data path to the leopard folder containing train and test folders
+    Output: a dev directory with 50% of the test set
+    Notes: The split is 50% by default and can be changes as needed
+    '''
+    np.random.seed(42)
+    output_folder=dataPath+'/dev'   
+
+    # If dev folder doesn't exist, create one
+    isExist = os.path.exists(output_folder) 
+    if not isExist:
+      os.makedirs(output_folder+'/images') 
+      os.makedirs(output_folder+'/labels') 
     
-   
+    # Attach to absolute path test and dev folders
+    test_images_path = dataPath+'/test/images'
+    test_label_path = dataPath+'/test/labels'
+
+    dev_images_path = dataPath+'/dev/images'
+    dev_label_path = dataPath+'/dev/labels'
+    
+    # given the threshold 0.5, split img and txt
+    for img in os.listdir(test_images_path):
+      if np.random.random_sample() < dev_test_split:
+        shutil.move(test_images_path+'/'+img, dev_images_path)
+
+        text_file=img[:-3]+'txt'
+        shutil.move(test_label_path+'/'+text_file, dev_label_path)
+
+def merge_dev_test(dataPath):
+    test_images_path = dataPath+'/test/images'
+    test_label_path = dataPath+'/test/labels'
+
+    dev_images_path = dataPath+'/dev/images'
+    dev_label_path = dataPath+'/dev/labels'
+
+    for img in os.listdir(dev_images_path):
+        shutil.move(dev_images_path+'/'+img, test_images_path)
+
+        text_file=img[:-3]+'txt'
+        shutil.move(dev_label_path+'/'+text_file, test_label_path)
+
+
     
