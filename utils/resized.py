@@ -26,7 +26,7 @@ def resize(im):
 
   ratio = float(desired_size)/max(old_size)
   new_size = tuple([int(x*ratio) for x in old_size])
-
+  
   im = im.resize(new_size, Image.ANTIALIAS)
   
   # create a new image and paste the resized on it
