@@ -186,7 +186,7 @@ def run(
                         print('detected object name is ', object_name)
                         original_img = im0
                         cropped_img = im0[y1:y2, x1:x2]
-                        cropped_path = '/content/Animal_Identification/train/cropped_images/' + save_path.split("/")[-1]
+                        cropped_path = '/content/Animal_Identification/test/cropped_images/' + save_path.split("/")[-1]
                         print(cropped_path)
                         cv2.imwrite(cropped_path,cropped_img) 
                         ### >>>>>> to retain all cropped picture give different name for each pictures, else it will overwrite and only last image will be saved.
