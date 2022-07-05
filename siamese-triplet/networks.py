@@ -85,3 +85,38 @@ class TripletNet(nn.Module):
 
     def get_embedding(self, x):
         return self.embedding_net(x)
+
+class MultiEmbeddingNet(nn.Module):
+    def __init__(self):
+        super(MultiEmbeddingNet, self).__init__()
+        res = model.resnet18(pretrained=True)
+        res = list(res.children())[:-1]
+        self.base = nn.Sequential(*res)
+        self.linear_fc_face = nn.Linear(512, 128)
+        self.linear_fc_flank = nn.Linear(512, 128)
+        self.linear_fc_full = nn.Linear(512, 128)
+        
+    def forward(self, x):
+        # shape [N, C]
+        #x = F.avg_pool2d(x, x.size()[2:])
+        outputs = []
+        x_f = self.base(x[:,0,:,:,:])
+        x_f = x_f.view(x_f.size(0), -1)
+        x_f = F.dropout(x_f,p=0.4)
+        outputs.append(self.linear_fc_face(x_f))
+        
+        x_f = self.base(x[:,1,:,:,:])
+        x_f = x_f.view(x_f.size(0), -1)
+        x_f = F.dropout(x_f,p=0.4)
+        outputs.append(self.linear_fc_flank(x_f))
+        
+        x_f = self.base(x[:,2,:,:,:])
+        x_f = x_f.view(x_f.size(0), -1)
+        x_f = F.dropout(x_f,p=0.4)
+        outputs.append(self.linear_fc_full(x_f))
+        x = torch.cat(outputs, -1)
+        x = F.normalize(x)
+        return x
+
+    def get_embedding(self, x):
+        return self.forward(x)    

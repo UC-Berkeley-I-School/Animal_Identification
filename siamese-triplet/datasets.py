@@ -4,144 +4,49 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torch.utils.data.sampler import BatchSampler
 
+class LeopardDataset(Dataset):
 
-class SiameseMNIST(Dataset):
-    """
-    Train: For each sample creates randomly a positive or a negative pair
-    Test: Creates fixed pairs for testing
-    """
-
-    def __init__(self, mnist_dataset):
-        self.mnist_dataset = mnist_dataset
-
-        self.train = self.mnist_dataset.train
-        self.transform = self.mnist_dataset.transform
-
-        if self.train:
-            self.train_labels = self.mnist_dataset.train_labels
-            self.train_data = self.mnist_dataset.train_data
-            self.labels_set = set(self.train_labels.numpy())
-            self.label_to_indices = {label: np.where(self.train_labels.numpy() == label)[0]
-                                     for label in self.labels_set}
-        else:
-            # generate fixed pairs for testing
-            self.test_labels = self.mnist_dataset.test_labels
-            self.test_data = self.mnist_dataset.test_data
-            self.labels_set = set(self.test_labels.numpy())
-            self.label_to_indices = {label: np.where(self.test_labels.numpy() == label)[0]
-                                     for label in self.labels_set}
-
-            random_state = np.random.RandomState(29)
-
-            positive_pairs = [[i,
-                               random_state.choice(self.label_to_indices[self.test_labels[i].item()]),
-                               1]
-                              for i in range(0, len(self.test_data), 2)]
-
-            negative_pairs = [[i,
-                               random_state.choice(self.label_to_indices[
-                                                       np.random.choice(
-                                                           list(self.labels_set - set([self.test_labels[i].item()]))
-                                                       )
-                                                   ]),
-                               0]
-                              for i in range(1, len(self.test_data), 2)]
-            self.test_pairs = positive_pairs + negative_pairs
-
-    def __getitem__(self, index):
-        if self.train:
-            target = np.random.randint(0, 2)
-            img1, label1 = self.train_data[index], self.train_labels[index].item()
-            if target == 1:
-                siamese_index = index
-                while siamese_index == index:
-                    siamese_index = np.random.choice(self.label_to_indices[label1])
-            else:
-                siamese_label = np.random.choice(list(self.labels_set - set([label1])))
-                siamese_index = np.random.choice(self.label_to_indices[siamese_label])
-            img2 = self.train_data[siamese_index]
-        else:
-            img1 = self.test_data[self.test_pairs[index][0]]
-            img2 = self.test_data[self.test_pairs[index][1]]
-            target = self.test_pairs[index][2]
-
-        img1 = Image.fromarray(img1.numpy(), mode='L')
-        img2 = Image.fromarray(img2.numpy(), mode='L')
-        if self.transform is not None:
-            img1 = self.transform(img1)
-            img2 = self.transform(img2)
-        return (img1, img2), target
+    def __init__(self, image_dir=None, transform=None):
+        self.image_dir = image_dir
+        self.n_classes = os.listdir(image_dir)
+        self.n_classes = [label for label in self.n_classes if label[0:4] == "leop"]
+        self.labels_dict = {label: int(label.split('_')[-1]) for label in self.n_classes}
+        self.labels_inv_dict = {int(label.split('_')[-1]) : label for label in self.n_classes}
+        self.face_image_files = []
+        self.flank_image_files = []
+        self.full_image_files = []
+        
+        
+        self.targets = []
+        for label in self.n_classes:
+            full_image_files = os.listdir(self.image_dir+'/'+label+'/full/')
+            
+            self.targets.extend(len(full_image_files)*[self.labels_dict[label]])
+            self.face_image_files.extend(os.listdir(self.image_dir+'/'+label+'/face/'))
+            self.flank_image_files.extend(os.listdir(self.image_dir+'/'+label+'/flank/'))    
+            self.full_image_files.extend(full_image_files)   
+                                         
+        self.transform = transform
 
     def __len__(self):
-        return len(self.mnist_dataset)
-
-
-class TripletMNIST(Dataset):
-    """
-    Train: For each sample (anchor) randomly chooses a positive and negative samples
-    Test: Creates fixed triplets for testing
-    """
-
-    def __init__(self, mnist_dataset):
-        self.mnist_dataset = mnist_dataset
-        self.train = self.mnist_dataset.train
-        self.transform = self.mnist_dataset.transform
-
-        if self.train:
-            self.train_labels = self.mnist_dataset.train_labels
-            self.train_data = self.mnist_dataset.train_data
-            self.labels_set = set(self.train_labels.numpy())
-            self.label_to_indices = {label: np.where(self.train_labels.numpy() == label)[0]
-                                     for label in self.labels_set}
-
-        else:
-            self.test_labels = self.mnist_dataset.test_labels
-            self.test_data = self.mnist_dataset.test_data
-            # generate fixed triplets for testing
-            self.labels_set = set(self.test_labels.numpy())
-            self.label_to_indices = {label: np.where(self.test_labels.numpy() == label)[0]
-                                     for label in self.labels_set}
-
-            random_state = np.random.RandomState(29)
-
-            triplets = [[i,
-                         random_state.choice(self.label_to_indices[self.test_labels[i].item()]),
-                         random_state.choice(self.label_to_indices[
-                                                 np.random.choice(
-                                                     list(self.labels_set - set([self.test_labels[i].item()]))
-                                                 )
-                                             ])
-                         ]
-                        for i in range(len(self.test_data))]
-            self.test_triplets = triplets
+        return len(self.targets)
 
     def __getitem__(self, index):
-        if self.train:
-            img1, label1 = self.train_data[index], self.train_labels[index].item()
-            positive_index = index
-            while positive_index == index:
-                positive_index = np.random.choice(self.label_to_indices[label1])
-            negative_label = np.random.choice(list(self.labels_set - set([label1])))
-            negative_index = np.random.choice(self.label_to_indices[negative_label])
-            img2 = self.train_data[positive_index]
-            img3 = self.train_data[negative_index]
-        else:
-            img1 = self.test_data[self.test_triplets[index][0]]
-            img2 = self.test_data[self.test_triplets[index][1]]
-            img3 = self.test_data[self.test_triplets[index][2]]
-
-        img1 = Image.fromarray(img1.numpy(), mode='L')
-        img2 = Image.fromarray(img2.numpy(), mode='L')
-        img3 = Image.fromarray(img3.numpy(), mode='L')
-        if self.transform is not None:
-            img1 = self.transform(img1)
-            img2 = self.transform(img2)
-            img3 = self.transform(img3)
-        return (img1, img2, img3), []
-
-    def __len__(self):
-        return len(self.mnist_dataset)
-
+        label = self.labels_inv_dict[self.targets[index]]
+        image_face = self.image_dir+'/'+label+'/face/'+self.face_image_files[index] 
+        image_flank = self.image_dir+'/'+label+'/flank/'+self.flank_image_files[index] 
+        image_full = self.image_dir+'/'+label+'/full/'+self.full_image_files[index] 
+        image_face = PIL.Image.open(image_face)
+        image_flank = PIL.Image.open(image_flank)
+        image_full = PIL.Image.open(image_full)
+        
+        outputs = []
+        if self.transform:
+            outputs.append(torch.unsqueeze(self.transform(image_face),0))
+            outputs.append(torch.unsqueeze(self.transform(image_flank),0))
+            outputs.append(torch.unsqueeze(self.transform(image_full),0))
+        out = torch.cat(outputs,dim=0)
+        return out, self.targets[index]
 
 class BalancedBatchSampler(BatchSampler):
     """
