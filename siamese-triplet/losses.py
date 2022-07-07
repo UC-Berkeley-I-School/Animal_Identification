@@ -89,3 +89,65 @@ class OnlineTripletLoss(nn.Module):
         losses = F.relu(ap_distances - an_distances + self.margin)
 
         return losses.mean(), len(triplets)
+    
+    
+class OnlineSymTripletLoss(nn.Module):
+    """
+    Online Triplets loss
+    Takes a batch of embeddings and corresponding labels.
+    Triplets are generated using triplet_selector object that take embeddings and targets and return indices of
+    triplets
+    """
+
+    def __init__(self, margin, triplet_selector):
+        super(OnlineSymTripletLoss, self).__init__()
+        self.margin = margin
+        self.triplet_selector = triplet_selector
+
+    def forward(self, embeddings, target):
+
+        triplets = self.triplet_selector.get_triplets(embeddings, target)
+
+        if embeddings.is_cuda:
+            triplets = triplets.cuda()
+
+        ap_distances = (embeddings[triplets[:, 0]] - embeddings[triplets[:, 1]]).pow(2).sum(1)  # .pow(.5)
+        an_distances = (embeddings[triplets[:, 0]] - embeddings[triplets[:, 2]]).pow(2).sum(1)  # .pow(.5)
+        pn_distances = (embeddings[triplets[:, 1]] - embeddings[triplets[:, 2]]).pow(2).sum(1)  # .pow(.5)
+        losses = F.relu(ap_distances - 0.5*(an_distances+pn_distances) + self.margin)
+
+        return losses.mean(), len(triplets)
+
+class OnlineModTripletLoss(nn.Module):
+    """
+    Online Triplets loss
+    Takes a batch of embeddings and corresponding labels.
+    Triplets are generated using triplet_selector object that take embeddings and targets and return indices of
+    triplets
+    """
+
+    def __init__(self, margin1, margin2, triplet_selector, beta=0.001):
+        super(OnlineModTripletLoss, self).__init__()
+        self.margin1 = margin1
+        self.margin2 = margin2
+        self.beta = beta
+        self.triplet_selector = triplet_selector
+
+    def forward(self, embeddings, target):
+
+        triplets = self.triplet_selector.get_triplets(embeddings, target)
+
+        if embeddings.is_cuda:
+            triplets = triplets.cuda()
+
+        ap_distances = (embeddings[triplets[:, 0]] - embeddings[triplets[:, 1]]).pow(2).sum(1)  # .pow(.5)
+        an_distances = (embeddings[triplets[:, 0]] - embeddings[triplets[:, 2]]).pow(2).sum(1)  # .pow(.5)
+        pn_distances = (embeddings[triplets[:, 1]] - embeddings[triplets[:, 2]]).pow(2).sum(1)  # .pow(.5)
+        losses = F.relu(ap_distances - an_distances + self.margin1)
+        losses = losses + F.relu(self.beta*(ap_distances+self.margin2))
+
+        return losses.mean(), len(triplets)
+
+    
+    
+    
