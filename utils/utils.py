@@ -1,7 +1,10 @@
-import fiftyone as fo
+#import fiftyone as fo
 import numpy as np
 import os
 import shutil, sys
+from skimage.io import imread, imshow, imsave
+from skimage.transform import resize
+import glob
 
 
 # Creates YOLOV4 dataset
@@ -191,4 +194,127 @@ def merge_dev_test(dataPath):
         shutil.move(dev_label_path+'/'+text_file, test_label_path)
 
 
+def get_scale_image(image_file, image_size = (32,32)):
+    image = imread(image_file)
+
+                       
+    height = image_size[0]
+    width = image_size[1]
+    scale_y = image.shape[0]
+    scale_x = image.shape[1]
     
+    # Adjust the height/width to specified image_size
+    
+    if scale_y > (height) :
+        scale = scale_y/height
+        scale_y = height
+        scale_x =  int(scale_x*1.0/scale)
+            
+                    
+    if  scale_x > width :
+        scale = scale_x/width
+        scale_x = width
+        scale_y =  int(scale_y*1.0/scale)
+     
+    image = resize(image, (scale_y, scale_x))
+    image = image*255
+    image = image.astype('uint8') 
+    mode = 'constant'
+    y_pad = (height-scale_y)//2
+    x_pad = (width-scale_x)//2
+    if len(image.shape) > 2:
+        image = np.pad(image, pad_width=[(y_pad, height-scale_y-y_pad),(x_pad, width-scale_x-x_pad),(0,0)], mode=mode)
+    else:
+        image = np.pad(image, pad_width=[(y_pad, height-scale_y-y_pad),(x_pad, width-scale_x-x_pad)], mode=mode)
+            
+    return(image)
+
+
+def resize_crop_images(in_path=None, out_path=None, face_size=(64,64), 
+                       flank_size=(64,64), full_size=(96,128)):
+    
+    labels = glob.glob(in_path+'/*')  
+    
+    for label in labels:
+        faces = glob.glob(label+'/face/*')
+        label_name = label.split('/')[-1]
+        
+        isExist = os.path.exists(out_path+'/'+label_name+'/face/')                  
+        # Create a new directory because it does not exist     
+        if not isExist:
+           os.makedirs(out_path+'/'+label_name+'/face/') 
+           os.makedirs(out_path+'/'+label_name+'/flank/') 
+           os.makedirs(out_path+'/'+label_name+'/full/') 
+        
+        face_labels = [face.split('/')[-1] for face in faces]
+        faces = [face for i, face in enumerate(faces) if face_labels[i][0:4] == 'face']
+        face_images = [get_scale_image(face, image_size=face_size) for face in faces]
+        resize_face_files = [out_path+'/'+label_name+'/face/'+face_label for face_label in face_labels]
+        for i in range(len(resize_face_files)):
+            imsave(resize_face_files[i], face_images[i])
+    
+        flanks = glob.glob(label+'/flank/*')
+        flank_labels = [flank.split('/')[-1] for flank in flanks]
+        flanks = [flank for i, flank in enumerate(flanks) if flank_labels[i][0:5] == 'flank']
+        flank_images = [get_scale_image(flank, image_size=flank_size) for flank in flanks]
+        resize_flank_files = [out_path+'/'+label_name+'/flank/'+flank_label for flank_label in flank_labels]
+        for i in range(len(resize_flank_files)):
+            imsave(resize_flank_files[i], flank_images[i])
+    
+        fulls = glob.glob(label+'/full/*')
+        full_labels = [full.split('/')[-1] for full in fulls]
+        fulls = [full for i, full in enumerate(fulls) if full_labels[i][0:4] == 'leop']
+
+        full_images = [get_scale_image(full, image_size=full_size) for full in fulls]
+        resize_full_files = [out_path+'/'+label_name+'/full/'+full_label for full_label in full_labels]
+        for i in range(len(resize_full_files)):
+            imsave(resize_full_files[i], full_images[i])
+        
+    return
+
+
+def verify_part_images(in_path=None):
+    
+    labels = glob.glob(in_path+'/*')
+    for label in labels:
+        faces = glob.glob(label+'/face/*')
+        faces = [face.split('/')[-1] for face in faces]
+        faces = [face for face in faces if face[0:4] == 'face']
+        faces = [face.split('_')[-1] for face in faces]
+        faces.sort()
+        
+        flanks = glob.glob(label+'/flank/*')
+        flanks = [flank.split('/')[-1] for flank in flanks]
+        flanks = [flank  for flank in flanks if flank[0:5] == 'flank']
+        flanks = [flank.split('_')[-1] for flank in flanks]
+        flanks.sort()
+        
+        fulls = glob.glob(label+'/full/*')
+        fulls = [full.split('/')[-1] for full in fulls]
+        fulls = [full for full in fulls if full[0:4] == 'leop' ]
+        fulls = [full.split('_')[-1] for full in fulls]
+        fulls.sort()
+        
+        count_faces = len(faces)
+        count_flanks = len(flanks)
+        count_fulls = len(fulls)
+        image_mismatch = False
+        if (count_faces == count_flanks) and (count_faces == count_fulls) and (count_flanks == count_fulls):
+            
+            for i in range(len(fulls)):
+                if (faces[i] != flanks[i]) or (faces[i] != fulls[i]) or (fulls[i] != flanks[i]):
+                    image_mismatch = True
+                    break
+            if  image_mismatch:
+                print("Mismatch in part images")
+            else:    
+                print("Part images match!!")      
+                    
+        else:        
+            #print(label)
+            #print(faces)
+            #print(flanks)
+            #print(fulls)
+            print("Mismatch in part images count")
+            print("Face:{}, Flank:{}, Full={}".format(count_faces, count_flanks, count_fulls))
+    return        
