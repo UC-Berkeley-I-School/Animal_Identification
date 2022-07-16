@@ -13,8 +13,10 @@ class LeopardDataset(Dataset):
         self.image_dir = image_dir
         self.n_classes = os.listdir(image_dir)
         self.n_classes = [label for label in self.n_classes if label[0:4] == "leop"]
-        self.labels_dict = {label: int(label.split('_')[-1]) for label in self.n_classes}
-        self.labels_inv_dict = {int(label.split('_')[-1]) : label for label in self.n_classes}
+        #self.labels_dict = {label: int(label.split('_')[-1]) for label in self.n_classes}
+        self.labels_dict = {label: i for i, label in enumerate(self.n_classes)}
+        #self.labels_inv_dict = {int(label.split('_')[-1]) : label for label in self.n_classes}
+        self.labels_inv_dict = {i : label for i, label in enumerate(self.n_classes)}
         self.face_image_files = []
         self.flank_image_files = []
         self.full_image_files = []
@@ -58,15 +60,8 @@ class LeopardDataset(Dataset):
             out_face = self.transform(image_face)
             out_flank = self.transform(image_flank)
             out_full = self.transform(image_full)
-        #out = torch.cat(outputs,dim=0)
         return out_face, out_flank, out_full, self.targets[index]
-        if 0: #self.transform:
-            outputs.append(torch.unsqueeze(self.transform(image_face),0))
-            outputs.append(torch.unsqueeze(self.transform(image_flank),0))
-            outputs.append(torch.unsqueeze(self.transform(image_full),0))
-        #out = torch.cat(outputs,dim=0)
-        #return out, self.targets[index]
-
+        
 class BalancedBatchSampler(BatchSampler):
     """
     BatchSampler - from a MNIST-like dataset, samples n_classes and within these classes samples n_samples.
