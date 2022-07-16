@@ -1,4 +1,7 @@
 import numpy as np
+import os
+import PIL
+import torch
 from PIL import Image
 
 from torch.utils.data import Dataset
@@ -16,15 +19,25 @@ class LeopardDataset(Dataset):
         self.flank_image_files = []
         self.full_image_files = []
         
-        
         self.targets = []
         for label in self.n_classes:
             full_image_files = os.listdir(self.image_dir+'/'+label+'/full/')
+            full_image_files = [file for file in full_image_files if file[0:4] == "leop"]
+            full_image_files.sort()
+            self.full_image_files.extend(full_image_files) 
             
             self.targets.extend(len(full_image_files)*[self.labels_dict[label]])
-            self.face_image_files.extend(os.listdir(self.image_dir+'/'+label+'/face/'))
-            self.flank_image_files.extend(os.listdir(self.image_dir+'/'+label+'/flank/'))    
-            self.full_image_files.extend(full_image_files)   
+            
+            face_image_files = os.listdir(self.image_dir+'/'+label+'/face/')
+            face_image_files = [file for file in face_image_files if file[0:4] == "face"]
+            face_image_files.sort()
+            self.face_image_files.extend(face_image_files)
+            
+            flank_image_files = os.listdir(self.image_dir+'/'+label+'/flank/')
+            flank_image_files = [file for file in flank_image_files if file[0:5] == "flank"]
+            flank_image_files.sort()
+            self.flank_image_files.extend(flank_image_files)    
+               
                                          
         self.transform = transform
 
@@ -42,11 +55,17 @@ class LeopardDataset(Dataset):
         
         outputs = []
         if self.transform:
+            out_face = self.transform(image_face)
+            out_flank = self.transform(image_flank)
+            out_full = self.transform(image_full)
+        #out = torch.cat(outputs,dim=0)
+        return out_face, out_flank, out_full, self.targets[index]
+        if 0: #self.transform:
             outputs.append(torch.unsqueeze(self.transform(image_face),0))
             outputs.append(torch.unsqueeze(self.transform(image_flank),0))
             outputs.append(torch.unsqueeze(self.transform(image_full),0))
-        out = torch.cat(outputs,dim=0)
-        return out, self.targets[index]
+        #out = torch.cat(outputs,dim=0)
+        #return out, self.targets[index]
 
 class BalancedBatchSampler(BatchSampler):
     """
