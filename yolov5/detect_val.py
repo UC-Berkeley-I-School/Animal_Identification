@@ -199,9 +199,9 @@ def run(
                           else:
                             class_name = 'flank'
                             object_name = 'flank'
-                          cropped_folder = '/content/gdrive/MyDrive/leopard_NI_1/train/cropped_images/leop_' + l_class + '/' + class_name + '/'                         
+                          cropped_folder = '/content/gdrive/MyDrive/leopard_NI_1/dev/cropped_images/leop_' + l_class + '/' + class_name + '/'                         
                           os.makedirs(cropped_folder, exist_ok=True)
-                          cropped_path = cropped_folder + object_name + '_' + '_'.join(l_img.split('_')[1:])                    
+                          cropped_path = cropped_folder + object_name + '_' + '_'.join(l_img.split('_')[1:])                        
                           cv2.imwrite(cropped_path,cropped_img) 
                         ### >>>>>> to retain all cropped picture give different name for each pictures, else it will overwrite and only last image will be saved.
                         
