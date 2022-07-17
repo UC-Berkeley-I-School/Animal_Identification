@@ -62,9 +62,10 @@ def fit(train_loader,
         for metric in metrics:
             message += '\t{}: {}'.format(metric.name(), metric.value())
 
-        if 1: #multi_class:
-            #pass
-        #else:
+        if multi_class:
+            val_loss, metrics = multi_class_test_epoch(val_loader, model, loss_fn, cuda, metrics)
+            val_loss /= len(val_loader)
+        else:
             val_loss, metrics = test_epoch(val_loader, model, loss_fn, cuda, metrics)
             val_loss /= len(val_loader)
 
@@ -301,6 +302,56 @@ def test_epoch(val_loader,
 
             if type(outputs) not in (tuple, list):
                 outputs = (outputs,)
+            loss_inputs = outputs
+            if target is not None:
+                target = (target,)
+                loss_inputs += target
+
+            loss_outputs = loss_fn(*loss_inputs)
+            loss = loss_outputs[0] if type(loss_outputs) in (tuple, list) else loss_outputs
+            val_loss += loss.item()
+
+            for metric in metrics:
+                metric(outputs, target, loss_outputs)
+
+    return val_loss, metrics
+
+
+def multi_class_test_epoch(val_loader,
+                            model,
+                            loss_fn,
+                            cuda,
+                            metrics):
+    for metric in metrics:
+        metric.reset()
+
+    val_loss = 0    
+    model.eval()
+       
+
+    with torch.no_grad():    
+        
+        for batch_idx, (data_face, data_flank, data_full, target) in enumerate(val_loader):
+            target = target if len(target) > 0 else None
+            if not type(data_face) in (tuple, list):
+                data_face = (data_face,)
+            if not type(data_flank) in (tuple, list):
+                data_flank = (data_flank,)
+            if not type(data_full) in (tuple, list):
+                data_full = (data_full,)    
+            
+            if cuda:
+                data_face = tuple(d.cuda() for d in data_face)
+                data_flank = tuple(d.cuda() for d in data_flank)
+                data_full = tuple(d.cuda() for d in data_full)    
+                if target is not None:
+                    target = target.cuda()
+
+            outputs = model(*data_face, *data_flank, *data_full)
+
+            if type(outputs) not in (tuple, list):
+                outputs = (outputs,)
+
             loss_inputs = outputs
             if target is not None:
                 target = (target,)
