@@ -2,7 +2,20 @@ import torch
 import numpy as np
 
 
-def fit(train_loader, val_loader, model, loss_fn, softmax_loss_fn, optimizer, scheduler, n_epochs, cuda, log_interval, metrics=[], start_epoch=0, multi_class=False, softmax=False):
+def fit(train_loader, 
+        val_loader, 
+        model, 
+        loss_fn, 
+        softmax_loss_fn, 
+        optimizer, 
+        scheduler, 
+        n_epochs, 
+        cuda,
+        log_interval,
+        metrics=[],
+        start_epoch=0,
+        multi_class=False,
+        softmax=False):
     """
     Loaders, model, loss function and metrics should work together for a given task,
     i.e. The model should be able to process data output of loaders,
@@ -17,12 +30,31 @@ def fit(train_loader, val_loader, model, loss_fn, softmax_loss_fn, optimizer, sc
         
         # Train stage
         if multi_class:
-            train_loss, metrics = multi_class_train_epoch(train_loader, model, loss_fn, optimizer, cuda, log_interval, metrics)
+            train_loss, metrics = multi_class_train_epoch(train_loader,
+                                                          model,
+                                                          loss_fn,
+                                                          optimizer,
+                                                          cuda,
+                                                          log_interval,
+                                                          metrics)
         else:    
             if softmax:
-                train_loss, metrics = softmax_triplet_train_epoch(train_loader, model, loss_fn, softmax_loss_fn, optimizer, cuda, log_interval, metrics)
+                train_loss, metrics = softmax_triplet_train_epoch(train_loader,
+                                                                  model,
+                                                                  loss_fn,
+                                                                  softmax_loss_fn,
+                                                                  optimizer,
+                                                                  cuda,
+                                                                  log_interval,
+                                                                  metrics)
             else:    
-                train_loss, metrics = train_epoch(train_loader, model, loss_fn, optimizer, cuda, log_interval, metrics)
+                train_loss, metrics = train_epoch(train_loader,
+                                                  model,
+                                                  loss_fn,
+                                                  optimizer,
+                                                  cuda,
+                                                  log_interval,
+                                                  metrics)
 
         scheduler.step()
     
@@ -30,8 +62,8 @@ def fit(train_loader, val_loader, model, loss_fn, softmax_loss_fn, optimizer, sc
         for metric in metrics:
             message += '\t{}: {}'.format(metric.name(), metric.value())
 
-        if 0: #multi_class:
-            pass
+        if 1: #multi_class:
+            #pass
         #else:
             val_loss, metrics = test_epoch(val_loader, model, loss_fn, cuda, metrics)
             val_loss /= len(val_loader)
@@ -44,7 +76,14 @@ def fit(train_loader, val_loader, model, loss_fn, softmax_loss_fn, optimizer, sc
         print(message)
 
 
-def train_epoch(train_loader, model, loss_fn, optimizer, cuda, log_interval, metrics):
+def train_epoch(train_loader,
+                model,
+                loss_fn,
+                optimizer,
+                cuda,
+                log_interval,
+                metrics):
+    
     for metric in metrics:
         metric.reset()
 
@@ -52,7 +91,8 @@ def train_epoch(train_loader, model, loss_fn, optimizer, cuda, log_interval, met
     losses = []
     total_loss = 0
 
-    for batch_idx, (data, target) in enumerate(train_loader):
+    #for batch_idx, (data, target) in enumerate(train_loader):
+    for batch_idx, (a, b, data, target) in enumerate(train_loader):
         target = target if len(target) > 0 else None
         if not type(data) in (tuple, list):
             data = (data,)
@@ -96,19 +136,26 @@ def train_epoch(train_loader, model, loss_fn, optimizer, cuda, log_interval, met
     total_loss /= (batch_idx + 1)
     return total_loss, metrics
 
-def softmax_triplet_train_epoch(train_loader, model, loss_fn, softmax_loss_fn, optimizer, cuda, log_interval, metrics):
+def softmax_triplet_train_epoch(train_loader,
+                                model,
+                                loss_fn,
+                                softmax_loss_fn,
+                                optimizer,
+                                cuda,
+                                log_interval,
+                                metrics):
     for metric in metrics:
         metric.reset()
 
     model.train()
     losses = []
     total_loss = 0
-    for batch_idx, (data1, data2, data, target) in enumerate(train_loader):
+    for batch_idx, (face, flank, full, target) in enumerate(train_loader):
         target = target if len(target) > 0 else None
-        if not type(data) in (tuple, list):
-            data = (data,)
+        if not type(full) in (tuple, list):
+            full = (full,)
         if cuda:
-            data = tuple(d.cuda() for d in data)
+            full = tuple(d.cuda() for d in full)
             if target is not None:
                 target = target.cuda()
 
@@ -116,7 +163,7 @@ def softmax_triplet_train_epoch(train_loader, model, loss_fn, softmax_loss_fn, o
         optimizer.zero_grad()
         
         #Run the model to generate triplet embeddings and softmax out
-        triplet_outputs, softmax_outputs = model(*data)
+        triplet_outputs, softmax_outputs = model(*full)
 
         #Compute cross entropy loss with softmax
         softmax_loss = softmax_loss_fn(softmax_outputs, target) 
@@ -152,7 +199,7 @@ def softmax_triplet_train_epoch(train_loader, model, loss_fn, softmax_loss_fn, o
 
         if batch_idx % log_interval == 0:
             message = 'Train: [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                batch_idx * len(data[0]), len(train_loader.dataset),
+                batch_idx * len(full[0]), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), np.mean(losses))
             for metric in metrics:
                 message += '\t{}: {}'.format(metric.name(), metric.value())
@@ -163,7 +210,13 @@ def softmax_triplet_train_epoch(train_loader, model, loss_fn, softmax_loss_fn, o
     total_loss /= (batch_idx + 1)
     return total_loss, metrics
 
-def multi_class_train_epoch(train_loader, model, loss_fn, optimizer, cuda, log_interval, metrics):
+def multi_class_train_epoch(train_loader,
+                            model,
+                            loss_fn,
+                            optimizer,
+                            cuda,
+                            log_interval,
+                            metrics):
     for metric in metrics:
         metric.reset()
 
@@ -223,13 +276,19 @@ def multi_class_train_epoch(train_loader, model, loss_fn, optimizer, cuda, log_i
     return total_loss, metrics
 
 
-def test_epoch(val_loader, model, loss_fn, cuda, metrics):
+def test_epoch(val_loader,
+               model,
+               loss_fn,
+               cuda,
+               metrics):
+    
     with torch.no_grad():
         for metric in metrics:
             metric.reset()
         model.eval()
         val_loss = 0
-        for batch_idx, (data, target) in enumerate(val_loader):
+        #for batch_idx, (data, target) in enumerate(val_loader):
+        for batch_idx, (a, b, data, target) in enumerate(val_loader):
             target = target if len(target) > 0 else None
             if not type(data) in (tuple, list):
                 data = (data,)

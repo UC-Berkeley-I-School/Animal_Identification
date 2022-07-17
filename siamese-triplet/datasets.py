@@ -23,6 +23,7 @@ class LeopardDataset(Dataset):
         
         self.targets = []
         for label in self.n_classes:
+            
             full_image_files = os.listdir(self.image_dir+'/'+label+'/full/')
             full_image_files = [file for file in full_image_files if file[0:4] == "leop"]
             full_image_files.sort()
