@@ -233,8 +233,7 @@ def get_scale_image(image_file, image_size = (32,32)):
 def resize_crop_images(in_path=None, out_path=None, face_size=(64,64), 
                        flank_size=(64,64), full_size=(96,128)):
     
-    #labels = glob.glob(in_path+'/*') 
-    labels =  [in_path+'/leop_190']
+    labels = glob.glob(in_path+'/*') 
     
     for label in labels:
         faces = glob.glob(label+'/face/*')

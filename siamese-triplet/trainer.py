@@ -30,13 +30,25 @@ def fit(train_loader,
         
         # Train stage
         if multi_class:
-            train_loss, metrics = multi_class_train_epoch(train_loader,
+            
+            if softmax:
+                train_loss, metrics = softmax_triplet_train_epoch(train_loader,
+                                                                  model,
+                                                                  loss_fn,
+                                                                  softmax_loss_fn,
+                                                                  optimizer,
+                                                                  cuda,
+                                                                  log_interval,
+                                                                  metrics)
+            else:    
+                train_loss, metrics = multi_class_train_epoch(train_loader,
                                                           model,
                                                           loss_fn,
                                                           optimizer,
                                                           cuda,
                                                           log_interval,
                                                           metrics)
+            
         else:    
             if softmax:
                 train_loss, metrics = softmax_triplet_train_epoch(train_loader,
@@ -63,11 +75,37 @@ def fit(train_loader,
             message += '\t{}: {}'.format(metric.name(), metric.value())
 
         if multi_class:
-            val_loss, metrics = multi_class_test_epoch(val_loader, model, loss_fn, cuda, metrics)
-            val_loss /= len(val_loader)
+            
+            if softmax:
+                val_loss, metrics = softmax_triplet_test_epoch(val_loader,
+                                                               model,
+                                                               loss_fn,
+                                                               softmax_loss_fn,
+                                                               cuda,
+                                                               metrics)
+            else:   
+                val_loss, metrics = multi_class_test_epoch(val_loader,
+                                                       model,
+                                                       loss_fn,
+                                                       cuda,
+                                                       metrics)
+ 
         else:
-            val_loss, metrics = test_epoch(val_loader, model, loss_fn, cuda, metrics)
-            val_loss /= len(val_loader)
+            if softmax:
+                val_loss, metrics = softmax_triplet_test_epoch(val_loader,
+                                                               model,
+                                                               loss_fn,
+                                                               softmax_loss_fn,
+                                                               cuda,
+                                                               metrics)
+            else:    
+                val_loss, metrics = test_epoch(val_loader,
+                                               model,
+                                               loss_fn,
+                                               cuda,
+                                               metrics)
+            
+        val_loss /= len(val_loader)
 
         message += '\nEpoch: {}/{}. Validation set: Average loss: {:.4f}'.format(epoch + 1, n_epochs,
                                                                                  val_loss)
@@ -93,7 +131,7 @@ def train_epoch(train_loader,
     total_loss = 0
 
     #for batch_idx, (data, target) in enumerate(train_loader):
-    for batch_idx, (a, b, data, target) in enumerate(train_loader):
+    for batch_idx, (data, target) in enumerate(train_loader):
         target = target if len(target) > 0 else None
         if not type(data) in (tuple, list):
             data = (data,)
@@ -289,7 +327,7 @@ def test_epoch(val_loader,
         model.eval()
         val_loss = 0
         #for batch_idx, (data, target) in enumerate(val_loader):
-        for batch_idx, (a, b, data, target) in enumerate(val_loader):
+        for batch_idx, (data, target) in enumerate(val_loader):
             target = target if len(target) > 0 else None
             if not type(data) in (tuple, list):
                 data = (data,)
@@ -363,5 +401,58 @@ def multi_class_test_epoch(val_loader,
 
             for metric in metrics:
                 metric(outputs, target, loss_outputs)
+
+    return val_loss, metrics
+
+def softmax_triplet_test_epoch(val_loader,
+                                model,
+                                loss_fn,
+                                softmax_loss_fn,
+                                cuda,
+                                metrics):
+    for metric in metrics:
+        metric.reset()
+
+    val_loss = 0    
+    model.eval()
+    with torch.no_grad(): 
+    
+        for batch_idx, (face, flank, full, target) in enumerate(val_loader):
+            target = target if len(target) > 0 else None
+            if not type(full) in (tuple, list):
+                full = (full,)
+            if cuda:
+                full = tuple(d.cuda() for d in full)
+                if target is not None:
+                    target = target.cuda()
+
+        
+            #Run the model to generate triplet embeddings and softmax out
+            triplet_outputs, softmax_outputs = model(*full)
+
+            #Compute cross entropy loss with softmax
+            softmax_loss = softmax_loss_fn(softmax_outputs, target) 
+        
+
+            #Compute triplet loss
+            if type(triplet_outputs) not in (tuple, list):
+                triplet_outputs = (triplet_outputs,)
+      
+            triplet_loss_inputs = triplet_outputs
+            if target is not None:
+                target = (target,)
+                triplet_loss_inputs += target
+
+            #compute triplet loss    
+            triplet_loss_outputs = loss_fn(*triplet_loss_inputs)
+            triplet_loss = triplet_loss_outputs[0] if type(triplet_loss_outputs) in (tuple, list) else triplet_loss_outputs
+        
+       
+        
+            loss = triplet_loss + softmax_loss*1.0/softmax_outputs.size()[0]
+            val_loss += loss.item()
+     
+            for metric in metrics:
+                metric(triplet_outputs, target, triplet_loss_outputs)
 
     return val_loss, metrics

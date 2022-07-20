@@ -104,7 +104,7 @@ class EmbeddingWithSoftmaxNet(nn.Module):
         #x = F.avg_pool2d(x, x.size()[2:])
         x = self.base(x)
         x = x.view(x.size(0), -1)
-        #x = F.dropout(x,p=0.4)
+        x = F.dropout(x,p=0.2)
         x = self.linear_fc(x)
         y = self.softmax_fc(x)
         x = F.normalize(x)
@@ -115,7 +115,7 @@ class EmbeddingWithSoftmaxNet(nn.Module):
     
 
 class MultiPartEmbeddingNet(nn.Module):
-    def __init__(self, face_emb_size=64, flank_emb_size=64, full_emb_size = 128):
+    def __init__(self, face_emb_size=128, flank_emb_size=128, full_emb_size = 256):
         super(MultiPartEmbeddingNet, self).__init__()
         res = model.resnet18(pretrained=True)
         num_fc_features = res.fc.in_features
@@ -133,19 +133,20 @@ class MultiPartEmbeddingNet(nn.Module):
         outputs = []
         x_f = self.face_base(x_face)
         x_f = x_f.view(x_f.size(0), -1)
-        x_f = F.dropout(x_f,p=0.1)
+        #x_f = F.dropout(x_f,p=0.4)
         outputs.append(self.linear_fc_face(x_f))
         
         x_f = self.flank_base(x_flank)
         x_f = x_f.view(x_f.size(0), -1)
-        x_f = F.dropout(x_f,p=0.1)
+        #x_f = F.dropout(x_f,p=0.4)
         outputs.append(self.linear_fc_flank(x_f))
         
         x_f = self.full_base(x_full)
         x_f = x_f.view(x_f.size(0), -1)
-        x_f = F.dropout(x_f,p=0.1)
+        #x_f = F.dropout(x_f,p=0.4)
         outputs.append(self.linear_fc_full(x_f))
         x = torch.cat(outputs, -1)
+        x = F.dropout(x,p=0.4)
         x = F.normalize(x)
         return x
 
