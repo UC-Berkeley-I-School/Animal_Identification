@@ -32,7 +32,7 @@ def fit(train_loader,
         if multi_class:
             
             if softmax:
-                train_loss, metrics = softmax_triplet_train_epoch(train_loader,
+                train_loss, metrics = multi_softmax_triplet_train_epoch(train_loader,
                                                                   model,
                                                                   loss_fn,
                                                                   softmax_loss_fn,
@@ -78,7 +78,7 @@ def fit(train_loader,
         if multi_class:
             
             if softmax:
-                val_loss, metrics = softmax_triplet_test_epoch(val_loader,
+                val_loss, metrics = multi_softmax_triplet_test_epoch(val_loader,
                                                                model,
                                                                loss_fn,
                                                                softmax_loss_fn,
@@ -250,7 +250,85 @@ def softmax_triplet_train_epoch(train_loader,
     total_loss /= (batch_idx + 1)
     return total_loss, metrics
 
+def multi_softmax_triplet_train_epoch(train_loader,
+                                model,
+                                loss_fn,
+                                softmax_loss_fn,
+                                optimizer,
+                                cuda,
+                                log_interval,
+                                metrics):
+    for metric in metrics:
+        metric.reset()
 
+    model.train()
+    losses = []
+    total_loss = 0
+    for batch_idx, (face, flank, full, target) in enumerate(train_loader):
+        target = target if len(target) > 0 else None
+        if not type(face) in (tuple, list):
+            face = (face,)
+        if not type(flank) in (tuple, list):
+            flank = (flank,)
+        if not type(full) in (tuple, list):
+            full = (full,)   
+        if cuda:
+            full = tuple(d.cuda() for d in full)
+            face = tuple(d.cuda() for d in face)
+            flank = tuple(d.cuda() for d in flank)
+            if target is not None:
+                target = target.cuda()
+
+        # Set the gradient to 0
+        optimizer.zero_grad()
+        
+        #Run the model to generate triplet embeddings and softmax out
+        triplet_outputs, softmax_outputs = model(*face, *flank, *full)
+
+        #Compute cross entropy loss with softmax
+        softmax_loss = softmax_loss_fn(softmax_outputs, target) 
+        
+        #Backprop with softmax
+        softmax_loss.backward(retain_graph=True)
+
+        #Compute triplet loss
+        if type(triplet_outputs) not in (tuple, list):
+            triplet_outputs = (triplet_outputs,)
+      
+        triplet_loss_inputs = triplet_outputs
+        if target is not None:
+            target = (target,)
+            triplet_loss_inputs += target
+
+        #compute triplet loss    
+        triplet_loss_outputs = loss_fn(*triplet_loss_inputs)
+        triplet_loss = triplet_loss_outputs[0] if type(triplet_loss_outputs) in (tuple, list) else triplet_loss_outputs
+        
+        #backprop triplet loss
+        triplet_loss.backward(retain_graph=True)
+        
+        #Run optimizer
+        optimizer.step()
+        
+        loss = triplet_loss + softmax_loss*1.0/softmax_outputs.size()[0]
+        losses.append(loss.item())
+        total_loss += loss.item()
+     
+        for metric in metrics:
+            metric(triplet_outputs, target, triplet_loss_outputs)
+
+        if batch_idx % log_interval == 0:
+            message = 'Train: [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                batch_idx * len(full[0]), len(train_loader.dataset),
+                100. * batch_idx / len(train_loader), np.mean(losses))
+            for metric in metrics:
+                message += '\t{}: {}'.format(metric.name(), metric.value())
+
+            print(message)
+            losses = []
+
+    total_loss /= (batch_idx + 1)
+    return total_loss, metrics
 
 
 def multi_class_train_epoch(train_loader,
@@ -433,6 +511,66 @@ def softmax_triplet_test_epoch(val_loader,
         
             #Run the model to generate triplet embeddings and softmax out
             triplet_outputs, softmax_outputs = model(*full)
+
+            #Compute cross entropy loss with softmax
+            softmax_loss = softmax_loss_fn(softmax_outputs, target) 
+        
+
+            #Compute triplet loss
+            if type(triplet_outputs) not in (tuple, list):
+                triplet_outputs = (triplet_outputs,)
+      
+            triplet_loss_inputs = triplet_outputs
+            if target is not None:
+                target = (target,)
+                triplet_loss_inputs += target
+
+            #compute triplet loss    
+            triplet_loss_outputs = loss_fn(*triplet_loss_inputs)
+            triplet_loss = triplet_loss_outputs[0] if type(triplet_loss_outputs) in (tuple, list) else triplet_loss_outputs
+        
+       
+        
+            loss = triplet_loss + softmax_loss*1.0/softmax_outputs.size()[0]
+            val_loss += loss.item()
+     
+            for metric in metrics:
+                metric(triplet_outputs, target, triplet_loss_outputs)
+
+    return val_loss, metrics
+
+
+def multi_softmax_triplet_test_epoch(val_loader,
+                                model,
+                                loss_fn,
+                                softmax_loss_fn,
+                                cuda,
+                                metrics):
+    for metric in metrics:
+        metric.reset()
+
+    val_loss = 0    
+    model.eval()
+    with torch.no_grad(): 
+    
+        for batch_idx, (face, flank, full, target) in enumerate(val_loader):
+            target = target if len(target) > 0 else None
+            if not type(face) in (tuple, list):
+                face = (face,)
+            if not type(flank) in (tuple, list):
+                flank = (flank,)
+            if not type(full) in (tuple, list):
+                full = (full,)   
+            if cuda:
+                full = tuple(d.cuda() for d in full)
+                face = tuple(d.cuda() for d in face)
+                flank = tuple(d.cuda() for d in flank)
+                if target is not None:
+                    target = target.cuda()
+
+        
+            #Run the model to generate triplet embeddings and softmax out
+            triplet_outputs, softmax_outputs = model(*face, *flank, *full)
 
             #Compute cross entropy loss with softmax
             softmax_loss = softmax_loss_fn(softmax_outputs, target) 
