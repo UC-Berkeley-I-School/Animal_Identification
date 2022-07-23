@@ -74,6 +74,7 @@ def fit(train_loader,
         for metric in metrics:
             message += '\t{}: {}'.format(metric.name(), metric.value())
 
+        # Validation pipeline    
         if multi_class:
             
             if softmax:
@@ -248,6 +249,9 @@ def softmax_triplet_train_epoch(train_loader,
 
     total_loss /= (batch_idx + 1)
     return total_loss, metrics
+
+
+
 
 def multi_class_train_epoch(train_loader,
                             model,
@@ -456,3 +460,5 @@ def softmax_triplet_test_epoch(val_loader,
                 metric(triplet_outputs, target, triplet_loss_outputs)
 
     return val_loss, metrics
+
+

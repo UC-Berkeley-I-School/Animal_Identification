@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import numpy as np
 
 
 import torchvision.models as model
@@ -88,6 +89,8 @@ class TripletNet(nn.Module):
         return self.embedding_net(x)
     
     
+    
+    
 class EmbeddingWithSoftmaxNet(nn.Module):
     def __init__(self, num_classes=2, emb_size=512):
         super(EmbeddingWithSoftmaxNet, self).__init__()
@@ -97,7 +100,11 @@ class EmbeddingWithSoftmaxNet(nn.Module):
         self.base = nn.Sequential(*res)
         self.linear_fc = nn.Linear(num_fc_features, emb_size)
         self.num_classes = num_classes
+        self.emb_size = emb_size
+        self.sum_centroids = torch.empty([self.num_classes,self.emb_size],dtype=torch.float32, requires_grad=False)
+        self.cluster_size = torch.zeros([self.num_classes,1],dtype=torch.short)
         self.softmax_fc = nn.Linear(emb_size, num_classes)
+        self.centroids = torch.empty([self.num_classes,self.emb_size],dtype=torch.float32, requires_grad=False)
         
     def forward(self, x):
         # shape [N, C]
@@ -109,10 +116,62 @@ class EmbeddingWithSoftmaxNet(nn.Module):
         y = self.softmax_fc(x)
         x = F.normalize(x)
         return x, y
-
-    def get_embedding(self, x):
-        return self.forward(x)
     
+    def compute_centroid(self, x, target):
+        
+        target_array = target.cpu().numpy().tolist()
+       
+        label_index = []
+        for i in range(self.num_classes):
+            label_index.append([])
+        for i, label in enumerate(target_array):
+            label_index[label].append(i)
+
+        for i, array in enumerate(label_index):
+            self.centroids[i] = torch.sum(x[array], dim=0) 
+            self.sum_centroids[i] += self.centroids[i]
+            self.cluster_size[i] += len(array)
+            self.centroids[i] = self.centroids[i]/len(array)
+    
+        return
+    
+    def compute_intra_dist_loss(self, x, target):
+    
+        target_array = target.cpu().numpy().tolist()
+        #min_dist_centroids = self.centroids[self.compute_min_dist(x)]
+        min_dist_centroids = self.centroids[target_array]
+        dist = torch.sub(x,min_dist_centroids)
+        dist = torch.sum(dist*dist)/len(target_array)
+        return dist
+    
+    def compute_final_centroid(self):
+        self.centroids = self.sum_centroids/self.cluster_size
+        
+    def compute_min_dist(self, x):
+        min_dist_index = []
+        for emb in x:
+            dist = torch.sub(emb, self.centroids)
+            dist = torch.sum(dist*dist, dim=1)
+            d_index = torch.argmin(dist)
+            min_dist_index.append(d_index.cpu().detach().item())
+        return min_dist_index
+    
+    def compute_inter_dist_loss(self, target):
+        losses = 0
+        target_array = target.cpu().numpy().tolist()
+        #min_dist_centroids = self.centroids[self.compute_min_dist(x)]
+        min_dist_centroids = self.centroids[target_array]
+        for centroids in min_dist_centroids:
+            dist = torch.sub(centroids, self.centroids)
+            dist = torch.sum(dist*dist, dim=1)
+            values, indices = torch.sort(dist)
+            losses = losses+values[1]
+            return losses
+        
+    def get_embedding(self, x, target):
+        return self.forward(x, target)    
+    
+  
 
 class MultiPartEmbeddingNet(nn.Module):
     def __init__(self, face_emb_size=128, flank_emb_size=128, full_emb_size = 256):
