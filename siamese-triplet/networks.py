@@ -252,4 +252,6 @@ class MultiPartEmbeddingWithSoftmaxNet(nn.Module):
         y = self.softmax_fc(x)
         x = F.normalize(x)
         return x, y
-   
+        
+    def get_embedding(self, x_face, x_flank, x_full):
+        return self.forward(x_face, x_flank, x_full)    
