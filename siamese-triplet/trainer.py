@@ -32,7 +32,7 @@ def fit(train_loader,
         if multi_class:
             
             if softmax:
-                train_loss, metrics = multi_softmax_triplet_train_epoch(train_loader,
+                train_loss, metrics = softmax_triplet_train_epoch(train_loader,
                                                                   model,
                                                                   loss_fn,
                                                                   softmax_loss_fn,
@@ -69,6 +69,7 @@ def fit(train_loader,
                                                   metrics)
 
         scheduler.step()
+       
     
         message = 'Epoch: {}/{}. Train set: Average loss: {:.4f}'.format(epoch + 1, n_epochs, train_loss)
         for metric in metrics:
@@ -78,7 +79,7 @@ def fit(train_loader,
         if multi_class:
             
             if softmax:
-                val_loss, metrics = multi_softmax_triplet_test_epoch(val_loader,
+                val_loss, metrics = softmax_triplet_test_epoch(val_loader,
                                                                model,
                                                                loss_fn,
                                                                softmax_loss_fn,
@@ -187,9 +188,11 @@ def softmax_triplet_train_epoch(train_loader,
     for metric in metrics:
         metric.reset()
 
+    model.reset_centroids()    
     model.train()
     losses = []
     total_loss = 0
+    model.reset_centroids()
     for batch_idx, (face, flank, full, target) in enumerate(train_loader):
         target = target if len(target) > 0 else None
         if not type(full) in (tuple, list):
@@ -208,6 +211,9 @@ def softmax_triplet_train_epoch(train_loader,
         #Compute cross entropy loss with softmax
         softmax_loss = softmax_loss_fn(softmax_outputs, target) 
         
+        #centroids = None
+        centroids = model.compute_centroids(triplet_outputs, target)
+        
         #Backprop with softmax
         softmax_loss.backward(retain_graph=True)
 
@@ -219,6 +225,12 @@ def softmax_triplet_train_epoch(train_loader,
         if target is not None:
             target = (target,)
             triplet_loss_inputs += target
+            
+            
+        if centroids is not None:
+            centroids = (centroids,)
+            triplet_loss_inputs += centroids    
+    
 
         #compute triplet loss    
         triplet_loss_outputs = loss_fn(*triplet_loss_inputs)
@@ -248,6 +260,8 @@ def softmax_triplet_train_epoch(train_loader,
             losses = []
 
     total_loss /= (batch_idx + 1)
+    with torch.no_grad():
+        model.compute_final_centroids()
     return total_loss, metrics
 
 def multi_softmax_triplet_train_epoch(train_loader,
@@ -284,6 +298,9 @@ def multi_softmax_triplet_train_epoch(train_loader,
         
         #Run the model to generate triplet embeddings and softmax out
         triplet_outputs, softmax_outputs = model(*face, *flank, *full)
+        
+        #centroids = None
+        centroids = model.compute_centroids(triplet_outputs, target)
 
         #Compute cross entropy loss with softmax
         softmax_loss = softmax_loss_fn(softmax_outputs, target) 
@@ -299,6 +316,10 @@ def multi_softmax_triplet_train_epoch(train_loader,
         if target is not None:
             target = (target,)
             triplet_loss_inputs += target
+            
+        if centroids is not None:
+            centroids = (centroids,)
+            triplet_loss_inputs += centroids    
 
         #compute triplet loss    
         triplet_loss_outputs = loss_fn(*triplet_loss_inputs)
@@ -328,6 +349,7 @@ def multi_softmax_triplet_train_epoch(train_loader,
             losses = []
 
     total_loss /= (batch_idx + 1)
+    model.compute_final_centroids()
     return total_loss, metrics
 
 
@@ -515,6 +537,8 @@ def softmax_triplet_test_epoch(val_loader,
             #Compute cross entropy loss with softmax
             softmax_loss = softmax_loss_fn(softmax_outputs, target) 
         
+            #centroids = None
+            centroids = model.centroids
 
             #Compute triplet loss
             if type(triplet_outputs) not in (tuple, list):
@@ -524,6 +548,11 @@ def softmax_triplet_test_epoch(val_loader,
             if target is not None:
                 target = (target,)
                 triplet_loss_inputs += target
+                
+            if centroids is not None:
+                centroids = (centroids,)
+                triplet_loss_inputs += centroids        
+    
 
             #compute triplet loss    
             triplet_loss_outputs = loss_fn(*triplet_loss_inputs)
@@ -574,6 +603,10 @@ def multi_softmax_triplet_test_epoch(val_loader,
 
             #Compute cross entropy loss with softmax
             softmax_loss = softmax_loss_fn(softmax_outputs, target) 
+            
+            #Get centroid
+            centroids = model.centroids
+
         
 
             #Compute triplet loss
@@ -584,6 +617,11 @@ def multi_softmax_triplet_test_epoch(val_loader,
             if target is not None:
                 target = (target,)
                 triplet_loss_inputs += target
+                
+                
+            if centroids is not None:
+                centroids = (centroids,)
+                triplet_loss_inputs += centroids        
 
             #compute triplet loss    
             triplet_loss_outputs = loss_fn(*triplet_loss_inputs)

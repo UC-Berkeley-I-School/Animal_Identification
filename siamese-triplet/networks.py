@@ -92,7 +92,7 @@ class TripletNet(nn.Module):
     
     
 class EmbeddingWithSoftmaxNet(nn.Module):
-    def __init__(self, num_classes=2, emb_size=512):
+    def __init__(self, num_classes=2, emb_size=512, dropout=0.3):
         super(EmbeddingWithSoftmaxNet, self).__init__()
         res = model.resnet18(pretrained=True)
         num_fc_features = res.fc.in_features
@@ -101,6 +101,7 @@ class EmbeddingWithSoftmaxNet(nn.Module):
         self.linear_fc = nn.Linear(num_fc_features, emb_size)
         self.num_classes = num_classes
         self.emb_size = emb_size
+        self.dropout = dropout
         self.sum_centroids = torch.empty([self.num_classes,self.emb_size],dtype=torch.float32, requires_grad=False)
         self.cluster_size = torch.zeros([self.num_classes,1],dtype=torch.short)
         self.softmax_fc = nn.Linear(emb_size, num_classes)
@@ -111,13 +112,13 @@ class EmbeddingWithSoftmaxNet(nn.Module):
         #x = F.avg_pool2d(x, x.size()[2:])
         x = self.base(x)
         x = x.view(x.size(0), -1)
-        x = F.dropout(x,p=0.2)
+        x = F.dropout(x,p=self.dropout)
         x = self.linear_fc(x)
         y = self.softmax_fc(x)
         x = F.normalize(x)
         return x, y
     
-    def compute_centroid(self, x, target):
+    def compute_centroids(self, x, target):
         
         target_array = target.cpu().numpy().tolist()
        
@@ -129,11 +130,18 @@ class EmbeddingWithSoftmaxNet(nn.Module):
 
         for i, array in enumerate(label_index):
             self.centroids[i] = torch.sum(x[array], dim=0) 
-            self.sum_centroids[i] += self.centroids[i]
-            self.cluster_size[i] += len(array)
+            with torch.no_grad():
+                self.sum_centroids[i] += self.centroids[i]
+                self.cluster_size[i] += len(array)
             self.centroids[i] = self.centroids[i]/len(array)
     
+        return self.centroids
+    
+    def reset_centroids(self):
+        self.centroids.requires_grad = False
+        self.sum_centroids.requires_grad = False
         return
+        
     
     def compute_intra_dist_loss(self, x, target):
     
@@ -144,7 +152,7 @@ class EmbeddingWithSoftmaxNet(nn.Module):
         dist = torch.sum(dist*dist)/len(target_array)
         return dist
     
-    def compute_final_centroid(self):
+    def compute_final_centroids(self):
         self.centroids = self.sum_centroids/self.cluster_size
         
     def compute_min_dist(self, x):
@@ -217,8 +225,7 @@ class MultiPartEmbeddingWithSoftmaxNet(nn.Module):
         super(MultiPartEmbeddingWithSoftmaxNet, self).__init__()
         res = model.resnet18(pretrained=True)
         num_fc_features = res.fc.in_features
-        
-        
+        self.num_classes = num_classes
         res = list(res.children())[:-1]
         self.face_base = nn.Sequential(*res)
         self.flank_base = nn.Sequential(*res)
@@ -228,6 +235,9 @@ class MultiPartEmbeddingWithSoftmaxNet(nn.Module):
         self.linear_fc_full = nn.Linear(num_fc_features, full_emb_size)
         emb_size = face_emb_size + flank_emb_size + full_emb_size
         self.softmax_fc = nn.Linear(emb_size, num_classes)
+        self.sum_centroids = torch.empty([num_classes,emb_size],dtype=torch.float32, requires_grad=False)
+        self.cluster_size = torch.zeros([num_classes,1],dtype=torch.short)
+        self.centroids = torch.empty([num_classes,emb_size],dtype=torch.float32, requires_grad=False)
         
     def forward(self, x_face, x_flank, x_full):
         # shape [N, C]
@@ -252,4 +262,27 @@ class MultiPartEmbeddingWithSoftmaxNet(nn.Module):
         y = self.softmax_fc(x)
         x = F.normalize(x)
         return x, y
+    
+    def compute_centroids(self, x, target):
+        target_array = target.cpu().numpy().tolist()
+       
+        label_index = []
+        for i in range(self.num_classes):
+            label_index.append([])
+        for i, label in enumerate(target_array):
+            label_index[label].append(i)
+
+        for i, array in enumerate(label_index):
+            self.centroids[i] = torch.sum(x[array], dim=0) 
+            self.sum_centroids[i] += self.centroids[i]
+            self.cluster_size[i] += len(array)
+            self.centroids[i] = self.centroids[i]/len(array)
+    
+        return self.centroids
+    
+    def compute_final_centroids(self):
+        self.centroids = self.sum_centroids/self.cluster_size
+    
+    def get_embedding(self, x_face, x_flank, x_full):
+        return self.forward(x_face, x_flank, x_full)    
    

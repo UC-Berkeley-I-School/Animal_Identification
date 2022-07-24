@@ -9,6 +9,12 @@ def pdist(vectors):
         dim=1).view(-1, 1)
     return distance_matrix
 
+def centdist(x, centroid):
+    dist0 = -2 * x.mm(torch.t(centroid))
+
+    dist1 = centroid.pow(2).sum(dim=1).view(1, -1) 
+    dist2 = x.pow(2).sum(dim=1).view(-1, 1)
+    return dist0 + dist1 + dist2
 
 class PairSelector:
     """
@@ -178,6 +184,57 @@ class FunctionNegativeTripletSelector(TripletSelector):
 
         return torch.LongTensor(triplets)
 
+class FunctionNegativeCentroidTripletSelector(TripletSelector):
+    """
+    For each positive pair, takes the hardest negative sample (with the greatest triplet loss value) to create a triplet
+    Margin should match the margin used in triplet loss.
+    negative_selection_fn should take array of loss_values for a given anchor-positive pair and all negative samples
+    and return a negative index for that pair
+    """
+
+    def __init__(self, margin, negative_selection_fn, cpu=True):
+        super(FunctionNegativeCentroidTripletSelector, self).__init__()
+        self.cpu = cpu
+        self.margin = margin
+        self.negative_selection_fn = negative_selection_fn
+
+    def get_triplets(self, embeddings, labels, centroids):
+        if self.cpu:
+            embeddings = embeddings.cpu()
+            centroids = centroids.cpu()
+            
+        if embeddings.is_cuda:
+            centroids = centroids.cuda()    
+        emb_dist_matrix = pdist(embeddings)
+
+        cent_dist_matrix = centdist(embeddings, centroids)
+        #emb_dist_matrix = emb_dist_matrix.cpu()
+        #cent_dist_matrix = cent_dist_matrix.cpu()
+
+        labels = labels.cpu().data.numpy().astype(int)
+        triplets = []
+
+        for label in set(labels):
+            label_mask = (labels == label)
+            positive_indices = np.where(label_mask)[0]
+            if len(positive_indices) < 2:
+                continue
+            negative_indices = np.where(np.logical_not(label_mask))[0]
+            ap_distances = cent_dist_matrix[positive_indices, label]
+            an_distances = cent_dist_matrix[negative_indices, label]
+            for positive_index, ap_distance in zip(positive_indices, ap_distances):
+                loss_values = ap_distance - an_distances + self.margin
+                loss_values = loss_values.data.cpu().numpy()
+                hard_negatives = self.negative_selection_fn(loss_values)
+                if hard_negatives is not None:
+                    hard_negatives = negative_indices[hard_negatives]
+                    triplets.append([label, positive_index, hard_negatives])
+                    
+        if len(triplets) == 0:
+            triplets.append([label, positive_indices[0], negative_indices[0]]) 
+        triplets = np.array(triplets)
+
+        return torch.LongTensor(triplets)            
 
 def HardestNegativeTripletSelector(margin, cpu=False): return FunctionNegativeTripletSelector(margin=margin,
                                                                                  negative_selection_fn=hardest_negative,
@@ -188,7 +245,10 @@ def RandomNegativeTripletSelector(margin, cpu=False): return FunctionNegativeTri
                                                                                 negative_selection_fn=random_hard_negative,
                                                                                 cpu=cpu)
 
+def SemihardNegativeTripletSelector(margin, cpu=False): return FunctionNegativeTripletSelector(margin=margin, negative_selection_fn=lambda x: semihard_negative(x, margin), cpu=cpu)
 
-def SemihardNegativeTripletSelector(margin, cpu=False): return FunctionNegativeTripletSelector(margin=margin,
+
+
+def SemihardNegativeCentroidTripletSelector(margin, cpu=False): return FunctionNegativeCentroidTripletSelector(margin=margin,
                                                                                   negative_selection_fn=lambda x: semihard_negative(x, margin),
                                                                                   cpu=cpu)
