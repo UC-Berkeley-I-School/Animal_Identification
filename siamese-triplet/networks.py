@@ -282,6 +282,11 @@ class MultiPartEmbeddingWithSoftmaxNet(nn.Module):
     
     def compute_final_centroids(self):
         self.centroids = self.sum_centroids/self.cluster_size
+        
+    def reset_centroids(self):
+        self.centroids.requires_grad = False
+        self.sum_centroids.requires_grad = False
+        return     
     
     def get_embedding(self, x_face, x_flank, x_full):
         return self.forward(x_face, x_flank, x_full)    

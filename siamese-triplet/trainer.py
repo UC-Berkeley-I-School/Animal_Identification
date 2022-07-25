@@ -275,7 +275,9 @@ def multi_softmax_triplet_train_epoch(train_loader,
     for metric in metrics:
         metric.reset()
 
+        
     model.train()
+    model.reset_centroids()   
     losses = []
     total_loss = 0
     for batch_idx, (face, flank, full, target) in enumerate(train_loader):
@@ -349,7 +351,8 @@ def multi_softmax_triplet_train_epoch(train_loader,
             losses = []
 
     total_loss /= (batch_idx + 1)
-    model.compute_final_centroids()
+    with torch.no_grad():
+        model.compute_final_centroids()
     return total_loss, metrics
 
 
