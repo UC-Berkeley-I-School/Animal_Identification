@@ -51,9 +51,9 @@ from utils.torch_utils import select_device, time_sync
 @torch.no_grad()
 def run(
         weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
+        id_weights= ROOT / 'leop_id_model_july_24.pt', # weights for re-id/ood
         source=ROOT / 'data/images',  # file/dir/URL/glob, 0 for webcam
         data=ROOT / 'data/coco128.yaml',  # dataset.yaml path
-        mode = 'inf', # training / inference mode
         imgsz=(640, 640),  # inference size (height, width)
         conf_thres=0.25,  # confidence threshold
         flank_size=(64, 64), # size of resized leopard flank
@@ -193,64 +193,12 @@ def run(
                         original_img = im0
                         cropped_img = im0[y1:y2, x1:x2]
 
-                        if (mode == 'train') or (mode == 'tr') or (mode == 't'):
-                          # extract leopard number and full leopard path
-                          l_class = save_path.split("/")[-1].split("_")[1]
-                          l_img = save_path.split("/")[-1]
+                        # extract leopard number and full leopard path
+                        l_class = save_path.split("/")[-1].split("_")[1]
+                        l_img = save_path.split("/")[-1]
 
-                          if l_img[0] == 'l': 
-                          # setting correct image size and class names 
-                            if object_name == 'head':
-                              class_name = 'face'
-                              object_name = 'face'
-                              size = face_size
-                            elif object_name == 'leopard':
-                              class_name = 'full'
-                              object_name = 'leop' 
-                              size = leop_size
-                            else:
-                              class_name = 'flank'
-                              object_name = 'flank'
-                              size = flank_size
-                        
-                          # keep track of which classes have been detected (flank/face/full)
-                          leop_objs = np.delete(leop_objs, np.where(leop_objs == class_name))
-
-                          # save cropped images in appropriate folder specified by 'project' input
-                          cropped_folder = str(project) + '/cropped_images/leop_' + l_class + '/' + class_name + '/'                         
-                          os.makedirs(cropped_folder, exist_ok=True)
-                          cropped_path = cropped_folder + object_name + '_' + '_'.join(l_img.split('_')[1:])                        
-                          cv2.imwrite(cropped_path,cropped_img) 
-                          LOGGER.info(f'Cropped image saved at ' + cropped_path)
-                          
-                          # resize image based on class name in appropriate folder specified by 'project' input
-                          if resize:
-                              # open cropped image and find new size based on old size and class name
-                              # keep aspect ratio constant
-                              cr_img = Image.open(cropped_path)
-                              old_size = cr_img.size  # old_size[0] is in (width, height) format
-                              ratio = float(max(size))/max(old_size)
-                              new_size = tuple([int(x*ratio) for x in old_size])
-
-                              # resize image based on Pillow's anti-alias methodology
-                              im = cr_img.resize(new_size, Image.ANTIALIAS)
-                              
-                              # create a new image and paste the resized on it 
-                              new_im = Image.new("RGB", (size[0], size[1]))
-                              new_im.paste(im, ((size[0]-new_size[0])//2,
-                                                  (size[1]-new_size[1])//2))
-                              resized_folder = str(project) + '/_resized/leop_' + l_class + '/' + class_name + '/'                         
-                              os.makedirs(resized_folder, exist_ok=True)
-                              resized_path = resized_folder + object_name + '_' + '_'.join(l_img.split('_')[1:])                        
-                              new_im.save(resized_path, format='JPEG', quality=100)
-                              LOGGER.info(f'Resized image saved at ' + resized_path)
-
-                        else:
-                          
-                          # extract leopard number and full leopard path
-                          l_img = save_path.split("/")[-1]
-
-                          # setting correct image size and class names 
+                        if l_img[0] == 'l': 
+                        # setting correct image size and class names 
                           if object_name == 'head':
                             class_name = 'face'
                             object_name = 'face'
@@ -263,54 +211,47 @@ def run(
                             class_name = 'flank'
                             object_name = 'flank'
                             size = flank_size
+                      
+                        # keep track of which classes have been detected (flank/face/full)
+                        leop_objs = np.delete(leop_objs, np.where(leop_objs == class_name))
+
+                        # save cropped images in appropriate folder specified by 'project' input
+                        cropped_folder = str(project) + '/cropped_images/leop_' + l_class + '/' + class_name + '/'                         
+                        os.makedirs(cropped_folder, exist_ok=True)
+                        cropped_path = cropped_folder + object_name + '_' + '_'.join(l_img.split('_')[1:])                        
+                        cv2.imwrite(cropped_path,cropped_img) 
+                        LOGGER.info(f'Cropped image saved at ' + cropped_path)
                         
-                          # keep track of which classes have been detected (flank/face/full)
-                          leop_objs = np.delete(leop_objs, np.where(leop_objs == class_name))
+                        # resize image based on class name in appropriate folder specified by 'project' input
+                        if resize:
+                            # open cropped image and find new size based on old size and class name
+                            # keep aspect ratio constant
+                            cr_img = Image.open(cropped_path)
+                            old_size = cr_img.size  # old_size[0] is in (width, height) format
+                            ratio = float(max(size))/max(old_size)
+                            new_size = tuple([int(x*ratio) for x in old_size])
 
-                          # save cropped images in appropriate folder specified by 'project' input
-                          cropped_folder = str(project) + '/cropped_images/out_' + '_'.join(l_img.split('_')[1:]).split('.')[0] + '/' + class_name + '/'                         
-                          os.makedirs(cropped_folder, exist_ok=True)
-                          cropped_path = cropped_folder + object_name + '_' + '_'.join(l_img.split('_')[1:])                        
-                          cv2.imwrite(cropped_path,cropped_img) 
-                          LOGGER.info(f'Cropped image saved at ' + cropped_path)
-                        
+                            # resize image based on Pillow's anti-alias methodology
+                            im = cr_img.resize(new_size, Image.ANTIALIAS)
+                            
+                            # create a new image and paste the resized on it 
+                            new_im = Image.new("RGB", (size[0], size[1]))
+                            new_im.paste(im, ((size[0]-new_size[0])//2,
+                                                (size[1]-new_size[1])//2))
+                            resized_folder = str(project) + '/_resized/leop_' + l_class + '/' + class_name + '/'                         
+                            os.makedirs(resized_folder, exist_ok=True)
+                            resized_path = resized_folder + object_name + '_' + '_'.join(l_img.split('_')[1:])                        
+                            new_im.save(resized_path, format='JPEG', quality=100)
+                            LOGGER.info(f'Resized image saved at ' + resized_path)
 
-                          # resize image based on class name in appropriate folder specified by 'project' input
-                          if resize:
-                              # open cropped image and find new size based on old size and class name
-                              # keep aspect ratio constant
-                              cr_img = Image.open(cropped_path)
-                              old_size = cr_img.size  # old_size[0] is in (width, height) format
-                              ratio = float(max(size))/max(old_size)
-                              new_size = tuple([int(x*ratio) for x in old_size])
-
-                              # resize image based on Pillow's anti-alias methodology
-                              im = cr_img.resize(new_size, Image.ANTIALIAS)
-                              
-                              # create a new image and paste the resized on it 
-                              new_im = Image.new("RGB", (size[0], size[1]))
-                              new_im.paste(im, ((size[0]-new_size[0])//2,
-                                                  (size[1]-new_size[1])//2))
-                              resized_folder = str(project) + '/_resized/out_' + '_'.join(l_img.split('_')[1:]).split('.')[0]  + '/' + class_name + '/'                         
-                              os.makedirs(resized_folder, exist_ok=True)
-                              resized_path = resized_folder + object_name + '_' + '_'.join(l_img.split('_')[1:])                        
-                              new_im.save(resized_path, format='JPEG', quality=100)
-                              LOGGER.info(f'Resized image saved at ' + resized_path)
-
-                        
                     if save_crop:
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
                 
                 # create blank file for undetected classes in cropped/resized folders
                 if len(leop_objs) < 3:
                   for cl in leop_objs:
-                    if (mode == 'train') or (mode == 'tr') or (mode == 't'):
-                      cropped_folder = str(project) + '/cropped_images/leop_' + l_class + '/' + cl + '/'
-                      resized_folder = str(project) + '/_resized/leop_' + l_class + '/' + cl + '/'  
-                    else:
-                      cropped_folder = str(project) + '/cropped_images/out_' + '_'.join(l_img.split('_')[1:]).split('.')[0] + '/' + cl + '/'
-                      resized_folder = str(project) + '/_resized/out_' + '_'.join(l_img.split('_')[1:]).split('.')[0] + '/' + cl + '/'    
-
+                    cropped_folder = str(project) + '/cropped_images/leop_' + l_class + '/' + cl + '/'
+                    resized_folder = str(project) + '/_resized/leop_' + l_class + '/' + cl + '/'  
                     if cl == 'full':
                       size = leop_size
                       cropped_path = cropped_folder + 'leop' + '_' + '_'.join(l_img.split('_')[1:])
@@ -328,7 +269,8 @@ def run(
                     cv2.imwrite(cropped_path, np.zeros([size[0],size[1],3],dtype=np.uint8))                     
                     os.makedirs(resized_folder, exist_ok=True)
                     cv2.imwrite(resized_path, np.zeros([size[0],size[1],3],dtype=np.uint8))
-              
+                
+
             # Stream results
             im0 = annotator.result()
             if view_img:
@@ -369,7 +311,7 @@ def run(
 def parse_opt():
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path(s)')
-    parser.add_argument('--mode', type=str, default='inf', choices = ['tr', 't', 'train', 'i', 'inf', 'infer', 'in','inference'],help='pipeline mode (training/inference mode)')
+    parser.add_argument('--id_weights', nargs='+', type=str, default=ROOT / 'leop_id_model_july_24.pt', help='id / ood weight path(s)')
     parser.add_argument('--source', type=str, default=ROOT / 'data/images', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
