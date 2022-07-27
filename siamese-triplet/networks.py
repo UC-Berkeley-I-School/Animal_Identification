@@ -7,7 +7,7 @@ import numpy as np
 
 import torchvision.models as model
 
-def extract_embeddings(dataloader, model, multi_class=False, softmax=False):
+def extract_embeddings(dataloader, model, multi_class=False, softmax=False, cuda=False:
     embeddings = []
     softmax_out = []
     ref_labels = []
