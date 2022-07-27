@@ -7,6 +7,53 @@ import numpy as np
 
 import torchvision.models as model
 
+def extract_embeddings(dataloader, model, multi_class=False, softmax=False):
+    embeddings = []
+    softmax_out = []
+    ref_labels = []
+    pred_labels = []
+    softmax_fn = torch.nn.Softmax(dim=1)
+    with torch.no_grad():
+        model.eval()
+        
+        if multi_class:
+            for face, flank, full, target in dataloader:
+                if cuda:
+                    #face = face.cuda()
+                    #flank = flank.cuda()
+                    full = full.cuda()
+                if softmax:    
+                    x,y=model.get_embedding(full)   
+                    z, preds = torch.max(y.data, 1)
+                    pred_labels.extend(preds.data.cpu().numpy().tolist())
+                    softmax_out.append(softmax_fn(y))
+                else:
+                    x=model.get_embedding(full)
+                
+                embeddings.append(x)
+                
+                ref_labels.extend(target.data.cpu().numpy().tolist())
+        else:      
+            for data, target in dataloader:
+                if cuda:
+                    data = data.cuda()
+                if softmax:    
+                    x,y=model.get_embedding(data)   
+                    z, preds = torch.max(y.data, 1)
+                    pred_labels.extend(preds.data.cpu().numpy().tolist())
+                    softmax_out.append(softmax_fn(y))
+                else:
+                    x=model.get_embedding(data)
+                
+                embeddings.append(x)
+                ref_labels.extend(target.data.cpu().numpy().tolist())
+                
+    if softmax:   
+        #return embeddings, softmax, ref_labels, pred_labels   
+        return torch.cat(embeddings, dim=0), torch.cat(softmax_out, dim=0), ref_labels, pred_labels
+    else:
+        return torch.cat(embeddings, -1), ref_labels
+
 class EmbeddingNet(nn.Module):
     def __init__(self):
         super(EmbeddingNet, self).__init__()

@@ -26,6 +26,8 @@ def fit(train_loader,
     Online triplet learning: batch loader, embedding model, online triplet loss
     """
 
+    max_triplets = 1000000
+    max_val_loss = 1000000.0
     for epoch in range(start_epoch, n_epochs):
         
         # Train stage
@@ -113,6 +115,13 @@ def fit(train_loader,
                                                                                  val_loss)
         for metric in metrics:
              message += '\t{}: {}'.format(metric.name(), metric.value())
+        if max_triplets > metric.value() and max_val_loss > val_loss:
+            #print(max_triplets, metric.value(), max_val_loss, val_loss)
+            torch.save(model.state_dict(), './best_weights')     
+            max_triplets = metric.value() 
+            max_val_loss = val_loss
+            print("Model Saved")
+
 
         print(message)
 
