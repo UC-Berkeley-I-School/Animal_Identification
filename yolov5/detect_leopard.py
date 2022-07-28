@@ -27,6 +27,7 @@ Usage - formats:
 import argparse
 import os
 import sys
+import shutil
 import numpy as np
 from pathlib import Path
 from PIL import Image, ImageOps
@@ -40,6 +41,18 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
+# getting the name of the directory
+# where the this file is present.
+current = os.path.dirname(os.path.realpath(__file__))
+  
+# Getting the parent directory name
+# where the current directory is present.
+parent = os.path.dirname(current)
+  
+# adding the parent directory to 
+# the sys.path.
+sys.path.append(parent)
+
 from models.common import DetectMultiBackend
 from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
 from utils.general import (LOGGER, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
@@ -47,6 +60,47 @@ from utils.general import (LOGGER, check_file, check_img_size, check_imshow, che
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, time_sync
 
+import torch
+import torch.backends.cudnn as cudnn
+import numpy
+from torch.optim import lr_scheduler
+import torch.optim as optim
+from torch.autograd import Variable
+
+import torchvision
+from torchvision import transforms
+from torchvision.datasets import ImageFolder
+import torch.utils.data as torch_data
+import torch
+
+transform_img = transforms.Compose([
+    #transforms.Resize(size= (128, 128)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225] )
+    ])
+
+from siamese_triplet.trainer import fit
+import numpy as np
+from siamese_triplet.datasets import BalancedBatchSampler
+from siamese_triplet.datasets import LeopardDataset
+import torch.nn as nn
+
+# Set up the network and training parameters
+from siamese_triplet.networks import EmbeddingNet
+from siamese_triplet.networks import EmbeddingWithSoftmaxNet
+from siamese_triplet.networks import MultiPartEmbeddingNet
+from siamese_triplet.networks import MultiPartEmbeddingWithSoftmaxNet
+
+from siamese_triplet.losses import OnlineTripletLoss
+from siamese_triplet.losses import OnlineSymTripletLoss
+from siamese_triplet.losses import OnlineModTripletLoss
+from siamese_triplet.utils_triplet import AllTripletSelector
+from siamese_triplet.utils_triplet import HardestNegativeTripletSelector
+from siamese_triplet.utils_triplet import RandomNegativeTripletSelector
+from siamese_triplet.utils_triplet import SemihardNegativeTripletSelector # Strategies for selecting triplets within a minibatch
+from siamese_triplet.metrics import AverageNonzeroTripletsMetric
+from sklearn.metrics import f1_score, classification_report 
 
 @torch.no_grad()
 def run(
@@ -73,6 +127,8 @@ def run(
         augment=False,  # augmented inference
         visualize=False,  # visualize features
         update=False,  # update all models
+        multi_embedding=False, # create predictions based on multi-embedding of face/flank/full
+        softmax=True, # utilize softmax function to create prediction
         project=ROOT / 'runs/detect',  # save results to project/name
         name='exp',  # save results to project/name
         exist_ok=False,  # existing project/name ok, do not increment
@@ -114,6 +170,9 @@ def run(
     # Run inference
     model.warmup(imgsz=(1 if pt else bs, 3, *imgsz))  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
+    
+    total_ref_labels = []
+    total_pred_labels = []
     for path, im, im0s, vid_cap, s in dataset:
         t1 = time_sync()
         im = torch.from_numpy(im).to(device)
@@ -227,11 +286,22 @@ def run(
                             # open cropped image and find new size based on old size and class name
                             # keep aspect ratio constant
                             cr_img = Image.open(cropped_path)
-                            old_size = cr_img.size  # old_size[0] is in (width, height) format
-                            ratio = float(max(size))/max(old_size)
-                            new_size = tuple([int(x*ratio) for x in old_size])
+                            scale_y, scale_x = cr_img.size  # old_size[0] is in (width, height) format
 
-                            # resize image based on Pillow's anti-alias methodology
+                            # Adjust the height/width to specified image_size
+
+                            if scale_y > (size[0]) :
+                              scale = scale_y/size[0]
+                              scale_y = size[0]
+                              scale_x =  int(scale_x*1.0/scale)
+                                  
+                                          
+                            if  scale_x > size[1] :
+                              scale = scale_x/size[1]
+                              scale_x = size[1]
+                              scale_y =  int(scale_y*1.0/scale)
+
+                            new_size = (scale_y, scale_x)
                             im = cr_img.resize(new_size, Image.ANTIALIAS)
                             
                             # create a new image and paste the resized on it 
@@ -270,6 +340,125 @@ def run(
                     os.makedirs(resized_folder, exist_ok=True)
                     cv2.imwrite(resized_path, np.zeros([size[0],size[1],3],dtype=np.uint8))
                 
+                # .... #
+
+                # IDENTIFICATION #
+
+                # .... #
+
+              
+
+                # creating temp folders for predictions
+                os.makedirs(str(project) + '/_resized/temp/' + 'leop_' + l_class + '/'+ 'flank', exist_ok = True)
+                shutil.copyfile(str(project) + '/_resized/' + 'leop_' + l_class + '/'+ 'flank/flank_' + '_'.join(l_img.split('_')[1:]) 
+                          , str(project) + '/_resized/temp/' + 'leop_' + l_class + '/'+ 'flank/flank_' + '_'.join(l_img.split('_')[1:]))
+                os.makedirs(str(project) + '/_resized/temp/' + 'leop_' + l_class + '/'+ 'face', exist_ok = True)
+                shutil.copyfile(str(project) + '/_resized/' + 'leop_' + l_class + '/'+ 'face/face_' + '_'.join(l_img.split('_')[1:]) 
+                          , str(project) + '/_resized/temp/' + 'leop_' + l_class + '/'+ 'face/face_' + '_'.join(l_img.split('_')[1:]))
+                os.makedirs(str(project) + '/_resized/temp/' + 'leop_' + l_class + '/'+ 'full', exist_ok = True)
+                shutil.copyfile(str(project) + '/_resized/' + 'leop_' + l_class + '/'+ 'full/leop_' + '_'.join(l_img.split('_')[1:]) 
+                          , str(project) + '/_resized/temp/' + 'leop_' + l_class + '/'+ 'full/leop_' + '_'.join(l_img.split('_')[1:]))
+
+
+                cuda = torch.cuda.is_available()
+                margin = 0.2
+                TEST_DATA_PATH = str(project) + '/_resized/temp/'
+                test_dataset = LeopardDataset(image_dir=TEST_DATA_PATH,transform=transform_img)
+                
+                if multi_embedding:
+                    if softmax:
+                        embedding_net = MultiPartEmbeddingWithSoftmaxNet(num_classes=64)
+                    else:
+                        embedding_net = MultiPartEmbeddingNet()
+                else:    
+                    if softmax:
+                        embedding_net = EmbeddingWithSoftmaxNet(num_classes=64)
+                    else:
+                        embedding_net = EmbeddingNet()
+
+                model_id = embedding_net
+
+                if cuda:
+                    model_id.cuda()
+                loss_fn = OnlineTripletLoss(margin, SemihardNegativeTripletSelector(margin))
+                lr = 1e-3
+                optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+                scheduler = lr_scheduler.StepLR(optimizer, 8, gamma=0.1, last_epoch=-1)
+                n_epochs = 20
+                log_interval = 50
+                softmax_loss_fn = nn.CrossEntropyLoss()
+
+                def extract_embeddings(dataloader, model, multi_class=False, softmax=False):
+                    embeddings = []
+                    ref_labels = []
+                    pred_labels = []
+                    with torch.no_grad():
+                        model.eval()
+                        
+                        if multi_class:
+                            for face, flank, full, target in dataloader:
+                                if cuda:
+                                    face = face.cuda()
+                                    flank = flank.cuda()
+                                    full = full.cuda()
+                                if softmax:
+                                    x,y=model.get_embedding(full) 
+                                    z, preds = torch.max(y.data, 1)
+                                    pred_labels.extend(preds.data.cpu().numpy().tolist())
+                                else:
+                                    x=model.get_embedding(full)
+                                
+                                embeddings.extend(x.data.cpu().numpy())
+                                ref_labels.extend(target.data.cpu().numpy().tolist())
+                        else:      
+                            for face, flank, full, target in dataloader:
+                                if cuda:
+                                    full = full.cuda()
+                                if softmax:
+                                    x,y=model.get_embedding(full) 
+                                    z, preds = torch.max(y.data, 1)
+                                    pred_labels.extend(preds.data.cpu().numpy().tolist())
+                                else:
+                                    x=model.get_embedding(full)
+                                
+                                embeddings.extend(x.data.cpu().numpy())
+                                ref_labels.extend(target.data.cpu().numpy().tolist())
+                                
+                    if softmax:        
+                        return embeddings, ref_labels, pred_labels
+                    else:
+                        return embeddings, ref_labels
+
+                model_id.load_state_dict(torch.load(id_weights[0]))
+
+                test_eval_loader = torch_data.DataLoader(test_dataset, batch_size=1, shuffle=False,  num_workers=2, drop_last=True, pin_memory=cuda)
+                test_emb, test_ref_labels, test_pred_labels= extract_embeddings(test_eval_loader, model_id, multi_class=True, softmax=True)
+
+                labels_dict =  {0: 'leop_196', 1: 'leop_190', 2: 'leop_277', 3: 'leop_75', 4: 'leop_86', 5: 'leop_26',
+                6: 'leop_212', 7: 'leop_10', 8: 'leop_80', 9: 'leop_89', 10: 'leop_282', 11: 'leop_249', 12: 'leop_29',
+                13: 'leop_18', 14: 'leop_34', 15: 'leop_94', 16: 'leop_7', 17: 'leop_291', 18: 'leop_56', 19: 'leop_0',
+                20: 'leop_32', 21: 'leop_201', 22: 'leop_206', 23: 'leop_35', 24: 'leop_1', 25: 'leop_297', 26: 'leop_57', 
+                27: 'leop_290', 28: 'leop_183', 29: 'leop_185', 30: 'leop_195', 31: 'leop_133', 32: 'leop_25', 33: 'leop_13',
+                34: 'leop_227', 35: 'leop_14', 36: 'leop_40', 37: 'leop_280', 38: 'leop_274', 39: 'leop_78', 40: 'leop_82',
+                41: 'leop_76', 42: 'leop_15', 43: 'leop_226', 44: 'leop_12', 45: 'leop_77', 46: 'leop_70', 47: 'leop_275', 
+                48: 'leop_79', 49: 'leop_63', 50: 'leop_90', 51: 'leop_3', 52: 'leop_4', 53: 'leop_232', 54: 'leop_37', 
+                55: 'leop_5', 56: 'leop_251', 57: 'leop_62', 58: 'leop_205', 59: 'leop_38', 60: 'leop_144', 61: 'leop_188',
+                62: 'leop_186', 63: 'leop_121'}
+
+                labels_inv_dict = dict(map(reversed, labels_dict.items()))
+                test_pred_labels[0] = int(labels_dict[test_pred_labels[0]].split('_')[1])
+                test_ref_labels[0] = int(test_dataset.n_classes[0].split('_')[1])
+                
+                if 'full' not in leop_objs: 
+                  LOGGER.info(f'\nPredicted class of leopard ' + str(test_ref_labels[0]) 
+                    +  ' is leopard ' + str(test_pred_labels[i]) + '.\n')
+                else: 
+                  LOGGER.info(f'\nLeopard not detected.\n')
+
+                total_ref_labels.append(test_ref_labels[0])
+                total_pred_labels.append(test_pred_labels[0])
+                shutil.rmtree(TEST_DATA_PATH)
+            
 
             # Stream results
             im0 = annotator.result()
@@ -298,6 +487,9 @@ def run(
 
         # Print time (inference-only)
         LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
+
+    # Creating prediction report
+    print(classification_report(total_pred_labels, total_ref_labels))
 
     # Print results
     t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
@@ -331,6 +523,8 @@ def parse_opt():
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--resize', default=True, help='resize inference')
+    parser.add_argument('--multi_embedding', default=False, help='resize inference')
+    parser.add_argument('--softmax', default=True, help='resize inference')
     parser.add_argument('--visualize', action='store_true', help='visualize features')
     parser.add_argument('--update', action='store_true', help='update all models')
     parser.add_argument('--project', default=ROOT / 'runs/detect', help='save results to project/name')
