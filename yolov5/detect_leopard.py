@@ -28,12 +28,16 @@ import argparse
 import os
 import sys
 import shutil
+#from typing import Annotated
 import numpy as np
 from pathlib import Path
 from PIL import Image, ImageOps
-
-import torch
-import torch.backends.cudnn as cudnn
+import warnings
+def fxn():
+    warnings.warn("deprecated", DeprecationWarning)
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    fxn()
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -53,6 +57,9 @@ parent = os.path.dirname(current)
 # the sys.path.
 sys.path.append(parent)
 
+
+import torch
+import torch.backends.cudnn as cudnn
 from models.common import DetectMultiBackend
 from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
 from utils.general import (LOGGER, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
@@ -74,7 +81,6 @@ import torch.utils.data as torch_data
 import torch
 
 transform_img = transforms.Compose([
-    #transforms.Resize(size= (128, 128)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406],
                          std=[0.229, 0.224, 0.225] )
@@ -212,7 +218,7 @@ def run(
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             imc = im0.copy() if save_crop else im0  # for save_crop
             annotator = Annotator(im0, line_width=line_thickness, example=str(names))
-            if len(det):
+            if len(det) and ((3 in reversed(det)[...,-1:] and len(names) == 4) or (0 in reversed(det)[...,-1:] and len(names) == 1)):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0.shape).round()
 
@@ -221,7 +227,7 @@ def run(
                     n = (det[:, -1] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
-                leop_objs = np.array(['flank','face','full'])
+                leop_objs = np.array(['flank','face'])
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
                     if save_txt:  # Write to file
@@ -231,15 +237,12 @@ def run(
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
                     if save_img or save_crop or view_img:  # Add bbox to image
-                        # c = int(cls)  # integer class
-                        # label = None if hide_labels else (names[c] if hide_conf else f'{names[c]} {conf:.2f}')
-                        # annotator.box_label(xyxy, label, color=colors(c, True))
-                        # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
 
                         x1 = int(xyxy[0].item())
                         y1 = int(xyxy[1].item())
                         x2 = int(xyxy[2].item())
                         y2 = int(xyxy[3].item())
+
 
                         confidence_score = conf
                         class_index = cls
@@ -318,15 +321,11 @@ def run(
                         save_one_box(xyxy, imc, file=save_dir / 'crops' / names[c] / f'{p.stem}.jpg', BGR=True)
                 
                 # create blank file for undetected classes in cropped/resized folders
-                if len(leop_objs) < 3:
+                if len(leop_objs):
                   for cl in leop_objs:
                     cropped_folder = str(project) + '/cropped_images/leop_' + l_class + '/' + cl + '/'
                     resized_folder = str(project) + '/_resized/leop_' + l_class + '/' + cl + '/'  
-                    if cl == 'full':
-                      size = leop_size
-                      cropped_path = cropped_folder + 'leop' + '_' + '_'.join(l_img.split('_')[1:])
-                      resized_path = resized_folder + 'leop' + '_' + '_'.join(l_img.split('_')[1:]) 
-                    elif cl == 'face':
+                    if cl == 'face':
                       size = face_size
                       cropped_path = cropped_folder + 'face' + '_' + '_'.join(l_img.split('_')[1:])
                       resized_path = resized_folder + 'face' + '_' + '_'.join(l_img.split('_')[1:])
@@ -452,8 +451,6 @@ def run(
                 if 'full' not in leop_objs: 
                   LOGGER.info(f'\nPredicted class of leopard ' + str(test_ref_labels[0]) 
                     +  ' is leopard ' + str(test_pred_labels[i]) + '.\n')
-                else: 
-                  LOGGER.info(f'\nLeopard not detected.\n')
 
                 total_ref_labels.append(test_ref_labels[0])
                 total_pred_labels.append(test_pred_labels[0])
