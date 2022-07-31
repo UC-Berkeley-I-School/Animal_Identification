@@ -341,15 +341,21 @@ class ResizeImages:
             self.full_dim = resize_dim[0]
             
              
+        #Read all files as leop_xx *        
         self.files = glob.glob(in_path+'/leopard/*')   
    
         
-        self.label_files = [file.split('/')[-1] for file in self.files]
+        self.full_label_files = [file.split('/')[-1] for file in self.files]
 
-        self.labels = ['_'.join(file.split('_')[0:2]) for file in self.label_files]
+        self.labels = ['_'.join(file.split('_')[0:2]) for file in self.full_label_files]
         self.labels = [label for label in self.labels if label[0:4] == 'leop'] 
-        self.files =  [file for i, file in enumerate(self.files) if self.label_files[i][0:4] == 'leop']
-        self.label_files =  [file for file in self.label_files if file[0:4] == 'leop']
+        self.files =  [file for i, file in enumerate(self.files) if self.full_label_files[i][0:4] == 'leop']
+        self.full_label_files =  [file for file in self.full_label_files if file[0:4] == 'leop']
+        
+        # Instead of reading face and flank files, we are copying from full
+        # In the final implementation, we would need to read face and flank images
+        self.face_label_files = [full.replace('leop', 'face') for full in self.full_label_files]
+        self.flank_label_files = [full.replace('leop', 'flank') for full in self.full_label_files]
         
     def run(self):
         if self.out_path==None:
@@ -364,17 +370,19 @@ class ResizeImages:
            print("Create Resize folders")
         
         full_images = [get_scale_image(full, image_size=self.full_dim) for full in self.files]
-        resize_full_files = [self.out_path+'/full/'+full for full in self.label_files]
+        resize_full_files = [self.out_path+'/full/'+full for full in self.full_label_files]
         for i in range(len(resize_full_files)):
             imsave(resize_full_files[i], full_images[i])
             
         face_images = [get_scale_image(face, image_size=self.face_dim) for face in self.files]
-        resize_face_files = [self.out_path+'/face/'+face for face in self.label_files]
+        
+        resize_face_files = [self.out_path+'/face/'+face for face in self.face_label_files]
         for i in range(len(resize_face_files)):
             imsave(resize_face_files[i], face_images[i])
         
         flank_images = [get_scale_image(flank, image_size=self.flank_dim) for flank in self.files]
-        resize_flank_files = [self.out_path+'/flank/'+flank for flank in self.label_files]
+       
+        resize_flank_files = [self.out_path+'/flank/'+flank for flank in self.flank_label_files]
         for i in range(len(resize_flank_files)):
             imsave(resize_flank_files[i], flank_images[i])
         

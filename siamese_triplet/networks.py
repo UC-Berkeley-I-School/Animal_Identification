@@ -4,8 +4,75 @@ import torch.nn.functional as F
 import math
 import numpy as np
 
-
+import torchvision
+from torchvision import transforms
+import torch.utils.data as data
 import torchvision.models as model
+from .datasets import LeopardDataset
+from .utils_triplet import centdist
+
+class InferenceNetwork:
+    def __init__(self, 
+                 infer_path=None, 
+                 infer_labels=None, 
+                 labels_dict=None,
+                 model=None, 
+                 ood_reject_thresh=0.5,
+                 num_classes=64,
+                 cuda=True):
+        self.ood_reject_thresh = ood_reject_thresh
+        self.model= model
+        self.cuda = cuda
+        self.num_classes = num_classes
+        transform_img = transforms.Compose([
+           #transforms.Resize(size= (128, 128)),
+            transforms.RandomAutocontrast(0.9),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])])
+        self.infer_dataset = LeopardDataset(image_dir=infer_path,transform=transform_img)
+        
+        self.labels_dict = labels_dict
+        self.labels_inv_dict = {}
+        for (key,value) in labels_dict.items():
+            self.labels_inv_dict[value] = key
+            
+        self.labels_inv_dict[num_classes] = 'leop_UKN'    
+        if infer_labels:
+            self.infer_ref_index = [labels_dict[key] if key in labels_dict.keys() else num_classes for key in infer_labels]
+            
+        self.infer_loader = data.DataLoader(self.infer_dataset, 
+                                  batch_size=1, 
+                                  shuffle=False,  
+                                  num_workers=2, 
+                                  drop_last=True, 
+                                  pin_memory=cuda)
+        
+    def run(self):
+        infer_emb, infer_softmax, dummy, infer_pred_index= extract_embeddings(self.infer_loader, 
+                                                                              self.model,
+                                                                              multi_class=True, 
+                                                                              softmax=True,
+                                                                              cuda=self.cuda)
+        
+        
+        
+        centroids = self.model.centroids
+        if self.cuda:
+            centroids = centroids.cuda()
+
+        infer_emb_dist = centdist(infer_emb, centroids)
+        infer_emb_dist_sort, infer_dist_indices = torch.sort(infer_emb_dist, dim=1)
+        infer_softmax_sort, infer_softmax_index = torch.sort(infer_softmax, dim=1)
+        
+        # OOD detection.  Set Uknown leopard index is 64
+        for i in range(len(infer_pred_index)):
+            if infer_emb_dist_sort[i,0] > self.ood_reject_thresh and infer_softmax_sort[i,-1] < 0.45 :
+                infer_pred_index[i] = self.num_classes 
+        
+        infer_pred_labels = [self.labels_inv_dict[index] for index in infer_pred_index ]
+        return infer_pred_index, infer_pred_labels
+        
 
 def extract_embeddings(dataloader,
                        model,
