@@ -9,8 +9,13 @@ from torch.utils.data.sampler import BatchSampler
 
 class LeopardDataset(Dataset):
 
-    def __init__(self, image_dir=None, transform=None):
+    def __init__(self, 
+                 image_dir=None,
+                 transform=None,
+                 labels_from_files=False):
+        
         self.image_dir = image_dir
+        self.labels_from_files = labels_from_files
         self.n_classes = os.listdir(image_dir)
         self.n_classes = [label for label in self.n_classes if label[0:4] == "leop"]
         #self.labels_dict = {label: int(label.split('_')[-1]) for label in self.n_classes}
@@ -56,12 +61,26 @@ class LeopardDataset(Dataset):
         image_flank = PIL.Image.open(image_flank)
         image_full = PIL.Image.open(image_full)
         
+        
+        
         outputs = []
         if self.transform:
             out_face = self.transform(image_face)
             out_flank = self.transform(image_flank)
             out_full = self.transform(image_full)
-        return out_face, out_flank, out_full, self.targets[index]
+            
+            
+        if self.labels_from_files:
+            label = self.full_image_files[index]
+            if label[0:4] == 'leop':
+                label = '_'.join(label.split('_')[0:2])
+            else:
+                label = 'leop_UKN'
+                
+            return out_face, out_flank, out_full, self.targets[index], label    
+        else:        
+            return out_face, out_flank, out_full, self.targets[index]    
+        
         
 class BalancedBatchSampler(BatchSampler):
     """

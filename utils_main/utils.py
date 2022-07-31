@@ -347,8 +347,8 @@ class ResizeImages:
         
         self.full_label_files = [file.split('/')[-1] for file in self.files]
 
-        self.labels = ['_'.join(file.split('_')[0:2]) for file in self.full_label_files]
-        self.labels = [label for label in self.labels if label[0:4] == 'leop'] 
+        #self.labels = ['_'.join(file.split('_')[0:2]) for file in self.full_label_files]
+        #self.labels = [label for label in self.labels if label[0:4] == 'leop'] 
         self.files =  [file for i, file in enumerate(self.files) if self.full_label_files[i][0:4] == 'leop']
         self.full_label_files =  [file for file in self.full_label_files if file[0:4] == 'leop']
         

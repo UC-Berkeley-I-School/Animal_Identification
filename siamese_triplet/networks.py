@@ -14,7 +14,7 @@ from .utils_triplet import centdist
 class InferenceNetwork:
     def __init__(self, 
                  infer_path=None, 
-                 infer_labels=None, 
+                 infer_labels=False, 
                  labels_dict=None,
                  model=None, 
                  ood_reject_thresh=0.5,
@@ -23,6 +23,7 @@ class InferenceNetwork:
         self.ood_reject_thresh = ood_reject_thresh
         self.model= model
         self.cuda = cuda
+        self.infer_labels = infer_labels
         self.num_classes = num_classes
         transform_img = transforms.Compose([
            #transforms.Resize(size= (128, 128)),
@@ -30,7 +31,9 @@ class InferenceNetwork:
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])])
-        self.infer_dataset = LeopardDataset(image_dir=infer_path,transform=transform_img)
+        self.infer_dataset = LeopardDataset(image_dir=infer_path,
+                                            transform=transform_img,
+                                            labels_from_files=infer_labels)
         
         self.labels_dict = labels_dict
         self.labels_inv_dict = {}
@@ -38,9 +41,7 @@ class InferenceNetwork:
             self.labels_inv_dict[value] = key
             
         self.labels_inv_dict[num_classes] = 'leop_UKN'    
-        if infer_labels:
-            self.infer_ref_index = [labels_dict[key] if key in labels_dict.keys() else num_classes for key in infer_labels]
-            
+       
         self.infer_loader = data.DataLoader(self.infer_dataset, 
                                   batch_size=1, 
                                   shuffle=False,  
@@ -49,10 +50,11 @@ class InferenceNetwork:
                                   pin_memory=cuda)
         
     def run(self):
-        infer_emb, infer_softmax, dummy, infer_pred_index= extract_embeddings(self.infer_loader, 
+        infer_emb, infer_softmax, ref_labels, infer_pred_index= extract_embeddings(self.infer_loader, 
                                                                               self.model,
                                                                               multi_class=True, 
                                                                               softmax=True,
+                                                                              labels_from_files=self.infer_labels,     
                                                                               cuda=self.cuda)
         
         
@@ -71,13 +73,15 @@ class InferenceNetwork:
                 infer_pred_index[i] = self.num_classes 
         
         infer_pred_labels = [self.labels_inv_dict[index] for index in infer_pred_index ]
-        return infer_pred_index, infer_pred_labels
+        ref_labels = [ref_label if ref_label in self.labels_dict else 'leop_UKN' for ref_label in ref_labels]
+        return ref_labels, infer_pred_labels
         
 
 def extract_embeddings(dataloader,
                        model,
                        multi_class=False,
                        softmax=False,
+                       labels_from_files = False,
                        cuda=False):
     embeddings = []
     softmax_out = []
@@ -87,23 +91,44 @@ def extract_embeddings(dataloader,
     with torch.no_grad():
         model.eval()
         
+        
         if multi_class:
-            for face, flank, full, target in dataloader:
-                if cuda:
-                    #face = face.cuda()
-                    #flank = flank.cuda()
-                    full = full.cuda()
-                if softmax:    
-                    x,y=model.get_embedding(full)   
-                    z, preds = torch.max(y.data, 1)
-                    pred_labels.extend(preds.data.cpu().numpy().tolist())
-                    softmax_out.append(softmax_fn(y))
-                else:
-                    x=model.get_embedding(full)
+            if labels_from_files:
+                for face, flank, full, target, label in dataloader:
+                    if cuda:
+                        #face = face.cuda()
+                        #flank = flank.cuda()
+                        full = full.cuda()
+                    if softmax:    
+                        x,y=model.get_embedding(full)   
+                        z, preds = torch.max(y.data, 1)
+                        pred_labels.extend(preds.data.cpu().numpy().tolist())
+                        softmax_out.append(softmax_fn(y))
+                    else:
+                        x=model.get_embedding(full)
                 
-                embeddings.append(x)
+                    embeddings.append(x)
                 
-                ref_labels.extend(target.data.cpu().numpy().tolist())
+                    ref_labels.extend(label) #target.data.cpu().numpy().tolist())
+                
+                
+            else:
+                for face, flank, full, target in dataloader:
+                    if cuda:
+                        #face = face.cuda()
+                        #flank = flank.cuda()
+                        full = full.cuda()
+                    if softmax:    
+                        x,y=model.get_embedding(full)   
+                        z, preds = torch.max(y.data, 1)
+                        pred_labels.extend(preds.data.cpu().numpy().tolist())
+                        softmax_out.append(softmax_fn(y))
+                    else:
+                        x=model.get_embedding(full)
+                
+                    embeddings.append(x)
+                
+                    ref_labels.extend(target.data.cpu().numpy().tolist())
         else:      
             for data, target in dataloader:
                 if cuda:
