@@ -27,7 +27,7 @@ class InferenceNetwork:
         self.num_classes = num_classes
         transform_img = transforms.Compose([
            #transforms.Resize(size= (128, 128)),
-            transforms.RandomAutocontrast(0.9),
+            #transforms.RandomAutocontrast(0.9),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])])
@@ -130,7 +130,7 @@ def extract_embeddings(dataloader,
                 
                     ref_labels.extend(target.data.cpu().numpy().tolist())
         else:      
-            for data, target in dataloader:
+            for a, b, data, target in dataloader:
                 if cuda:
                     data = data.cuda()
                 if softmax:    
@@ -148,7 +148,7 @@ def extract_embeddings(dataloader,
         #return embeddings, softmax, ref_labels, pred_labels   
         return torch.cat(embeddings, dim=0), torch.cat(softmax_out, dim=0), ref_labels, pred_labels
     else:
-        return torch.cat(embeddings, -1), ref_labels
+        return torch.cat(embeddings, dim=0), 0, ref_labels, 0
 
 class EmbeddingNet(nn.Module):
     def __init__(self):
@@ -245,7 +245,7 @@ class EmbeddingWithSoftmaxNet(nn.Module):
         self.num_classes = num_classes
         self.emb_size = emb_size
         self.dropout = dropout
-        self.sum_centroids = torch.empty([self.num_classes,self.emb_size],dtype=torch.float32, requires_grad=False)
+        self.sum_centroids = torch.zeros([self.num_classes,self.emb_size],dtype=torch.float32, requires_grad=False)
         self.cluster_size = torch.zeros([self.num_classes,1],dtype=torch.short)
         self.softmax_fc = nn.Linear(emb_size, num_classes)
         self.centroids = torch.empty([self.num_classes,self.emb_size],dtype=torch.float32, requires_grad=False)
@@ -283,6 +283,9 @@ class EmbeddingWithSoftmaxNet(nn.Module):
     def reset_centroids(self):
         self.centroids.requires_grad = False
         self.sum_centroids.requires_grad = False
+        for i in range(self.sum_centroids.size()[0]):
+            self.sum_centroids[i,:] = 0
+            self.cluster_size[i] = 0
         return
         
     
@@ -296,6 +299,8 @@ class EmbeddingWithSoftmaxNet(nn.Module):
         return dist
     
     def compute_final_centroids(self):
+        #print(torch.max(self.cluster_size))
+        #print(torch.max(self.sum_centroids))
         self.centroids = self.sum_centroids/self.cluster_size
         
     def compute_min_dist(self, x):

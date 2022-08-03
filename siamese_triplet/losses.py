@@ -77,7 +77,7 @@ class OnlineTripletLoss(nn.Module):
         self.margin = margin
         self.triplet_selector = triplet_selector
 
-    def forward(self, embeddings, target):
+    def forward(self, embeddings, target,centroids=None):
 
         triplets = self.triplet_selector.get_triplets(embeddings, target)
 
@@ -104,7 +104,7 @@ class OnlineSymTripletLoss(nn.Module):
         self.margin = margin
         self.triplet_selector = triplet_selector
 
-    def forward(self, embeddings, target):
+    def forward(self, embeddings, target,centroids=None):
 
         triplets = self.triplet_selector.get_triplets(embeddings, target)
 
@@ -133,7 +133,7 @@ class OnlineModTripletLoss(nn.Module):
         self.beta = beta
         self.triplet_selector = triplet_selector
 
-    def forward(self, embeddings, target):
+    def forward(self, embeddings, target,centroids=None):
 
         triplets = self.triplet_selector.get_triplets(embeddings, target)
 

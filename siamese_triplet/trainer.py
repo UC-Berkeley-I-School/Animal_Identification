@@ -115,9 +115,11 @@ def fit(train_loader,
                                                                                  val_loss)
         for metric in metrics:
              message += '\t{}: {}'.format(metric.name(), metric.value())
-        if max_triplets > metric.value() and max_val_loss > val_loss:
+        if max_triplets > metric.value(): # and max_val_loss > val_loss:
             #print(max_triplets, metric.value(), max_val_loss, val_loss)
-            torch.save(model.state_dict(), './best_weights')     
+            torch.save(model.state_dict(), './best_weights')
+            if softmax:
+                torch.save(model.centroids, './best_centroids')
             max_triplets = metric.value() 
             max_val_loss = val_loss
             print("Model Saved")
@@ -142,7 +144,7 @@ def train_epoch(train_loader,
     total_loss = 0
 
     #for batch_idx, (data, target) in enumerate(train_loader):
-    for batch_idx, (data, target) in enumerate(train_loader):
+    for batch_idx, (a, b, data, target) in enumerate(train_loader):
         target = target if len(target) > 0 else None
         if not type(data) in (tuple, list):
             data = (data,)
@@ -271,6 +273,7 @@ def softmax_triplet_train_epoch(train_loader,
     total_loss /= (batch_idx + 1)
     with torch.no_grad():
         model.compute_final_centroids()
+        print(torch.max(torch.abs(model.centroids)))
     return total_loss, metrics
 
 def multi_softmax_triplet_train_epoch(train_loader,
@@ -443,7 +446,7 @@ def test_epoch(val_loader,
         model.eval()
         val_loss = 0
         #for batch_idx, (data, target) in enumerate(val_loader):
-        for batch_idx, (data, target) in enumerate(val_loader):
+        for batch_idx, (a, b, data, target) in enumerate(val_loader):
             target = target if len(target) > 0 else None
             if not type(data) in (tuple, list):
                 data = (data,)

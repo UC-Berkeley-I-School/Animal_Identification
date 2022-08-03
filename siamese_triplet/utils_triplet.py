@@ -245,6 +245,10 @@ def RandomNegativeTripletSelector(margin, cpu=False): return FunctionNegativeTri
                                                                                 negative_selection_fn=random_hard_negative,
                                                                                 cpu=cpu)
 
+def RandomNegativeCentroidTripletSelector(margin, cpu=False): return FunctionNegativeCentroidTripletSelector(margin=margin,
+                                                                                negative_selection_fn=random_hard_negative,
+                                                                                cpu=cpu)
+
 def SemihardNegativeTripletSelector(margin, cpu=False): return FunctionNegativeTripletSelector(margin=margin, negative_selection_fn=lambda x: semihard_negative(x, margin), cpu=cpu)
 
 
